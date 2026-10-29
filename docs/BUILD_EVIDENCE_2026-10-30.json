@@ -46,7 +46,7 @@
   },
   "host_runtime_asan_ubsan_passed": true,
   "production_arm_assembly_emulation_cases": 23,
-  "original_executable_present": false,
+  "original_executable_present": true,
   "original_game_executed": false,
   "physical_vita_verified": false,
   "vpk_created": false,
@@ -62,5 +62,9 @@
   "all_19_c_asm_units_compiled": true,
   "foundation_actual_method_tests_asan_ubsan_passed": true,
   "partial_framework_classes": 4,
-  "remaining_unimplemented_framework_classes": 60
+  "remaining_unimplemented_framework_classes": 60,
+  "evidence_scope": "Vita Mach-O loader; Linux touchHLE reference execution recorded separately",
+  "original_image_preflight_passed": true,
+  "original_owner_preflight_evidence": "docs/REAL_OWNER_PREFLIGHT_2026-10-30.json",
+  "reference_original_menu_reached_on_linux": true
 }

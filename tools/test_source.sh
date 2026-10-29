@@ -34,3 +34,5 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/foundation.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_foundation
 build/host-runtime/test_foundation
+
+python3 tests/test_preflight_synthetic.py

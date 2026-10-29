@@ -21,6 +21,12 @@ const import_entry darwin_imports[] = {
     /* F(also_not_an_import, NULL) */
 };
 """)
+    (src/"objc.c").write_text('''
+static void bind_class_imports(void) {
+    const char *names[]={"_OBJC_CLASS_$_NSData","_OBJC_METACLASS_$_NSData"};
+    class_imports[0]=(import_entry){names[0],data_class,IM2_IMPORT_DATA};
+}
+''')
     have=audit.table_names(src)
     assert "_malloc" in have
     assert "_glBindTexture" in have
@@ -29,7 +35,8 @@ const import_entry darwin_imports[] = {
     assert "_not_an_import" not in have
     assert "_also_not_an_import" not in have
     assert "_objc_msgSend" in have
-    assert len(have)==5,have
+    assert "_OBJC_CLASS_$_NSData" in have and "_OBJC_METACLASS_$_NSData" in have
+    assert len(have)==7,have
     expected=src/"original.json"
     expected.write_text('{"dynamic_imports":["_malloc","_glBindTexture","_missing"]}')
     requested=audit.original_names(expected)

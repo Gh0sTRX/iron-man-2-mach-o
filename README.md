@@ -47,3 +47,5 @@ Details and limits: [guest class progress](docs/GUEST_CLASS_PROGRESS_2026-10-29_
 Full Turkish progress report: [30 October 2026](docs/DURUM_2026-10-30_TR.md).
 
 Latest Foundation work: [UTF-8 strings, NSData and bundle resources](docs/FOUNDATION_PROGRESS_2026-10-30_TR.md).
+
+Original game main menu reached in a **Linux touchHLE reference run**, not the Vita loader: [evidence and limits](docs/OWNER_MENU_REFERENCE_2026-10-30_TR.md).

@@ -39,6 +39,11 @@ def preflight(data, rbs):
         elif cmd==11:
             if length<80:raise ValueError("Short dysymtab")
             dys=struct.unpack_from("<18I",data,off+8)
+        elif cmd==0x21:
+            if length<20:raise ValueError("Short encryption command")
+            cryptoff,cryptsize,cryptid=struct.unpack_from("<3I",data,off+8)
+            if cryptoff+cryptsize>len(data) or cryptid:
+                raise ValueError("Encrypted or invalid encryption region")
         off+=length
     if not {"__TEXT","__DATA"}<=set(segs) or sym is None or dys is None:
         raise ValueError("Missing required VM/symbol tables")
@@ -67,6 +72,18 @@ def preflight(data, rbs):
         if not (tv<=(value&~1)<dv+ds):
             raise ValueError("RBS1 pointer payload outside the mapped guest image")
     rebase_set=set(rebases)
+    ext_off,ext_count=dys[14:16]
+    if ext_off+ext_count*8>len(data):raise ValueError("External relocation table exceeds file")
+    external_targets=set()
+    for i in range(ext_count):
+        address,info=struct.unpack_from("<2I",data,ext_off+8*i)
+        if address&0x80000003 or info>>28 or not info&0x08000000 or info&0x01000000 or (info&0x06000000)!=0x04000000:
+            raise ValueError("Unsupported external ARM relocation encoding")
+        if (info&0xffffff)>=nsyms:raise ValueError("External relocation symbol outside table")
+        if not (tv<=address<=tv+ts-4 or dv<=address<=dv+ds-4):raise ValueError("External relocation outside mapped image")
+        if address in external_targets:raise ValueError("Duplicate external relocation address")
+        external_targets.add(address)
+    if external_targets & rebase_set:raise ValueError("RBS1 overlaps external relocation")
     local=[]
     external=[]
     for addr,size,reserved1 in sections:
@@ -88,6 +105,7 @@ def preflight(data, rbs):
         "image_vm_span":dv+ds-tv,"undefined_imports":nu,
         "rbs1_relocations":count,"local_indirect_slots":len(local),
         "external_indirect_slots":len(external),
+        "external_relocations":ext_count,"rbs1_external_relocation_overlap":0,
         "local_slots_all_relocated":not missing,"external_slots_not_relocated":not contaminated
     }
 
