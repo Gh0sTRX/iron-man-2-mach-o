@@ -37,5 +37,8 @@ for name,init in new_modules.items():
 assert "im2_uikit_hierarchy_init(root,foundation_failure)" in src,"UIKit superclass init missing"
 assert "source/uikit_hierarchy.c" in cmake,"UIKit module not in ARM ELF"
 assert "tests/test_uikit_hierarchy.c" in runner,"UIKit host tests not wired"
+assert "im2_uikit_application_init(root,foundation_failure)" in src,"UIApplication state init missing"
+assert "source/uikit_application.c" in cmake,"UIApplication not in Vita ELF"
+assert "tests/test_uikit_application.c" in runner,"UIApplication tests not wired"
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)
