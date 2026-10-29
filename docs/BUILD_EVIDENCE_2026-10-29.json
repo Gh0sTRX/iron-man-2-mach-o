@@ -1,13 +1,12 @@
 {
   "sdk": "vitasdk/vitasdk@sha256:8227da1b596d981f4513cd9b36bda1e43857f6dae5bcf4312c1cd40167f7d9bb",
   "compiler": "arm-vita-eabi-gcc 15.2.0",
-  "all_15_c_asm_units_compiled": true,
   "full_elf_linked": true,
   "strong_undefined_symbols": 0,
   "optional_weak_symbols": 15,
-  "elf_sha256": "9bb684b4b2604018ffffb9b5f90a9279e6eb9aaa41826dbb7c28f5301a46e2f0",
+  "elf_sha256": "abb9330b59529bfc3ac1a313ce28604caeda327c7924cfd432ba8eb8b6c839d6",
   "source_sha256": {
-    "vendor/ios-loader-boilerplate/CMakeLists.txt": "22a58e3f9f9980a41ffc5c5c03449eaad1e4f99685e4d993ce1f3dfcdc7d7012",
+    "vendor/ios-loader-boilerplate/CMakeLists.txt": "8967dee5710a16fb2c2c65daee8a98c788327baa1d3352f95289865d18644b1a",
     "vendor/ios-loader-boilerplate/source/asm.S": "25e29d6d64358e012d254d1a43ea44df76dfa9025b9e7ea16b9fadad3ee369aa",
     "vendor/ios-loader-boilerplate/source/cgbi.c": "1bb89695c88df82912a8fdc0799deecd27ffec164750396d935c9d9cd6197bb1",
     "vendor/ios-loader-boilerplate/source/cgbi.h": "c2ca93424685710e9a52e10e7d88f93fbdb4004856b875e7eddd9259c5695ed9",
@@ -25,8 +24,10 @@
     "vendor/ios-loader-boilerplate/source/input.h": "19ed892929b998da04aba2af9870822d08d9c4c10bd575e2c6827e74e25282b9",
     "vendor/ios-loader-boilerplate/source/log.c": "6b9f691fc12d0608fec1c03b2e85869d008d9c1b7f55480ed10739fccc6df592",
     "vendor/ios-loader-boilerplate/source/log.h": "4d8f4e1ec40743b28c9a47867032aa3ad0b5aee5aa8c56d733ec25195bd3cf0f",
-    "vendor/ios-loader-boilerplate/source/macho.c": "0170f0150ab35d2f9829a2352c2501dd3e4684a5157f532aaa64ff9df6ad4c22",
+    "vendor/ios-loader-boilerplate/source/macho.c": "a1b772d5721f539e9111290e999bc0c874fda6900c965756eda382ec82ad812c",
     "vendor/ios-loader-boilerplate/source/macho.h": "45a745ab36e0e61f9969e23337e230f93d0069778d1b6dbeec49750550ba0cec",
+    "vendor/ios-loader-boilerplate/source/macho_reloc.c": "641ed7f0201a20aec2a8575760acd2d79a519ba7a1dd707f9ed09262b12b99b3",
+    "vendor/ios-loader-boilerplate/source/macho_reloc.h": "f1038eee0ee4abdada42e8e3b5f7fb062924a06e6e31b266dab6da7dc82ca158",
     "vendor/ios-loader-boilerplate/source/main.c": "f8ef9edbd85d2129e88427c15d0a77b6a7b735edbed67e12c08a05bc84b39721",
     "vendor/ios-loader-boilerplate/source/objc.c": "8f7bb961b00706da0c1fdaf179085e8c2624d8e3347e3a0835924cea0cd953cf",
     "vendor/ios-loader-boilerplate/source/objc.h": "ade2ddc81299a50dda141777a5c37da92757f4bb9c03a3aab7dd804437ca3113",
@@ -41,5 +42,8 @@
   "original_executable_present": false,
   "original_game_executed": false,
   "physical_vita_verified": false,
-  "vpk_created": false
+  "vpk_created": false,
+  "all_16_c_asm_units_compiled": true,
+  "external_reloc_asan_ubsan_passed": true,
+  "prior_runtime_commit_ci": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40952934103"
 }

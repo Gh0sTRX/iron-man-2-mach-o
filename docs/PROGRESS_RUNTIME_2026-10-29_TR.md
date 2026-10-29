@@ -29,3 +29,9 @@ Yükleyici henüz class/metaclass dışındaki bütün external relocation kayı
 Apple `objc4-437/runtime/objc-runtime-new.h` ABI araştırması için okundu: https://github.com/apple-oss-distributions/objc4/blob/objc4-437/runtime/objc-runtime-new.h . Apple uygulama kodu kopyalanmadı. Yeni çekirdek MIT olarak işaretlendi; eski vendored MetalSyntax kaynağının lisansı hâlâ belirsiz, projenin özel depo durumu korundu.
 
 İki derleme kapısı kanıtla açıldı; altı import/runtime/cihaz/lisans kapısı kapalı. Cihaz RX/cache doğrulaması olmadan guest execution varsayılan kapalı. SELF/VPK oluşturulmadı. Probe workflow da yalnız ELF üretecek şekilde değiştirildi.
+
+## İkinci düzeltme: bütün external relocation tablosu
+
+Sınıf/metaclass dışındaki external relocation kayıtlarının atlanması düzeltildi. Bağımsız `macho_reloc.c` artık mutlak, external ARM_RELOC_VANILLA32 kayıtlarını planlıyor; C++ vtable+8 ve negatif addend değerlerini koruyor. Bütün kayıt adresleri, sembol indeksleri, türleri ve yinelenen hedefler önce doğrulanıyor; eksik import varsa hiçbir relocation slotu kısmen yazılmıyor. Hem __TEXT staging hem __DATA hedefleri destekleniyor. Bilinmeyen PC-relative/paired/scattered relocation biçimleri sessizce atlanmıyor, reddediliyor. RBS1/external hedef çakışması, sıralı RBS1 üzerinde ikili aramayla yazmadan önce reddediliyor. Orijinal dosya mevcut olmadığından gerçek 5.225 kaydın tamamına uygulama bu oturumda doğrulanmadı.
+
+Yeni C relocation testleri ASan/UBSan ile geçti; mevcut kontroller ve tam ARM ELF bağlantısı tekrar geçti. Kaynak birimi sayısı artık 16. İlk runtime commit'inin kaynak CI'ı `40952934103` başarılıdır. Ayrı eski probe workflow'u ELF'yi başarıyla derledi fakat GitHub artifact kotası dolu olduğundan upload adımı başarısızdı (`40952934028`). Otomatik artifact yüklemesi kaldırıldı; ELF hash'i loga yazılıyor, hiçbir eski artifact silinmedi. SELF/VPK hâlâ üretilmiyor.

@@ -24,6 +24,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/main.c
   source/darwin_printf.c
   source/macho.c
+  source/macho_reloc.c
   source/imports.c
   source/darwin.c
   source/objc.c

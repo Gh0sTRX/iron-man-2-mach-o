@@ -21,8 +21,5 @@ jobs:
           test -s build/probe/im2_exec_probe
           test ! -f build/probe/im2_exec_probe.vpk
           test ! -f build/probe/eboot.bin
-      - uses: actions/upload-artifact@v4
-        with:
-          name: im2-exec-probe-elf
-          path: build/probe/im2_exec_probe
-          if-no-files-found: error
+      - name: Record ELF digest in log (no artifact storage)
+        run: sha256sum build/probe/im2_exec_probe

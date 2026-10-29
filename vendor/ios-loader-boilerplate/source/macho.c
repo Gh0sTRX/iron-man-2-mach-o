@@ -17,6 +17,7 @@
 #include "imports.h"
 #include "log.h"
 #include "macho.h"
+#include "macho_reloc.h"
 
 #define LC_SEGMENT 0x1
 #define LC_SYMTAB 0x2
@@ -190,7 +191,32 @@ void macho_hook(const char *name, void *dst) {
     kuKernelFlushCaches((void *)(a & ~1), sizeof(code));
 }
 
-static int apply_rebase(const char *rebase_path) {
+typedef struct { unsigned unresolved_objc_classes,unresolved_other; } ExternalContext;
+static uint8_t *external_word(void *ctx,uint32_t va) {
+    (void)ctx;
+    if(va>=text_vm && (uint64_t)va+4u<=(uint64_t)text_vm+text_size)
+        return text_buf+(va-text_vm);
+    if(va>=data_vm && (uint64_t)va+4u<=(uint64_t)data_vm+data_size)
+        return (uint8_t *)(uintptr_t)(macho_slide+va);
+    return NULL;
+}
+static int external_symbol(void *opaque,uint32_t idx,uint32_t *address) {
+    ExternalContext *ctx=opaque;
+    if(idx>=nsyms || symtab[idx].n_strx>=strtab_size) return -1;
+    const char *name=strtab+symtab[idx].n_strx;
+    if(!memchr(name,0,strtab_size-symtab[idx].n_strx)) return -1;
+    int is_class=!strncmp(name,"_OBJC_CLASS_$_",14) || !strncmp(name,"_OBJC_METACLASS_$_",18);
+    const import_entry *imp=imports_lookup(name);
+    if(imp && (!is_class || imp->data)) {
+        *address=imp->data?imp->addr:make_thunk(imp->addr,ml_align_call);return 0;
+    }
+    uintptr_t guest=macho_sym(name);
+    if(guest) {*address=(uint32_t)guest;return 0;}
+    if(is_class) ctx->unresolved_objc_classes++;else ctx->unresolved_other++;
+    l_warn("Unresolved required external relocation: %s",name);return -1;
+}
+
+static int apply_rebase(const char *rebase_path,const dysymtab_command *dynamic,const uint8_t *slice,size_t slice_size) {
     if (!rebase_path)
         return -1;
     FILE *f = fopen(rebase_path, "rb");
@@ -224,6 +250,9 @@ static int apply_rebase(const char *rebase_path) {
     }
     fclose(f);
 
+    if(dynamic && (uint64_t)dynamic->extreloff+(uint64_t)dynamic->nextrel*8u>slice_size) {
+        free(entries);return -1;
+    }
     // Validate ALL addresses before touching image memory.
     // Iron Man 2's generated RBS1 is sorted, unique and word-aligned.
     uint32_t previous = 0;
@@ -254,6 +283,16 @@ static int apply_rebase(const char *rebase_path) {
             return -1;
         }
         previous = va;
+    }
+    // The validated RBS1 is sorted; reject external overlap in O(R log N).
+    if(dynamic) for(uint32_t i=0;i<dynamic->nextrel;i++) {
+        uint32_t address;memcpy(&address,slice+dynamic->extreloff+8u*i,4);
+        uint32_t lo=0,hi=count;
+        while(lo<hi) {uint32_t mid=lo+(hi-lo)/2;if(entries[mid]<address)lo=mid+1;else hi=mid;}
+        if(lo<count && entries[lo]==address) {
+            l_error("RBS1 overlaps external relocation at 0x%08X",(unsigned)address);
+            free(entries);return -1;
+        }
     }
     for (uint32_t i = 0; i < count; i++) {
         const uint32_t va = entries[i];
@@ -497,54 +536,21 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     }
 
     // Rebase original local pointers BEFORE overwriting imported symbol slots.
-    if (apply_rebase(rebase_path) != 0)
+    if (apply_rebase(rebase_path,dysym,d,slice_len) != 0)
         return -1;
 
     // ObjC classrefs are S_REGULAR in the original Iron Man 2 Mach-O.
     // Resolve their external relocations from LC_DYSYMTAB; indirect pointers
     // alone do NOT cover these class objects.
-    unsigned unresolved_objc_classes = 0;
-    if (dysym && dysym->nextrel) {
-        if ((uint64_t)dysym->extreloff + (uint64_t)dysym->nextrel * 8u > slice_len)
-            return -1;
-        for (uint32_t i = 0; i < dysym->nextrel; i++) {
-            const uint8_t *rec = d + dysym->extreloff + i * 8u;
-            uint32_t va = *(const uint32_t *)rec;
-            uint32_t info = *(const uint32_t *)(rec + 4);
-            // Mach-O relocation_info: symbolnum[23:0], pcrel[24],
-            // length[26:25], extern[27], type[31:28].
-            if (!(info & 0x08000000u) || (va & 0x80000000u))
-                continue;
-            if (va < data_vm || (uint64_t)va + 4u > (uint64_t)data_vm + data_size)
-                continue;
-            if ((info & 0x06000000u) != 0x04000000u || (info & 0x01000000u) ||
-                (info & 0xf0000000u))
-                continue; // only vanilla, absolute, 32-bit relocations
-            uint32_t idx = info & 0x00ffffffu;
-            if (!symtab || !strtab || idx >= nsyms ||
-                symtab[idx].n_strx >= strtab_size)
-                return -1;
-            const char *name = strtab + symtab[idx].n_strx;
-            if (!memchr(name, 0, strtab_size - symtab[idx].n_strx))
-                return -1;
-            if (strncmp(name, "_OBJC_CLASS_$_", 14) != 0 &&
-                strncmp(name, "_OBJC_METACLASS_$_", 18) != 0)
-                continue;
-            const import_entry *imp = imports_lookup(name);
-            if (!imp || !imp->data) {
-                if (unresolved_objc_classes < 20u)
-                    l_warn("Unresolved ObjC class data relocation: %s", name);
-                unresolved_objc_classes++;
-                continue;
-            }
-            uint32_t *slot = (uint32_t *)(uintptr_t)(macho_slide + va);
-            *slot = imp->addr;
+    ExternalContext external={0,0};
+    if(dysym) {
+        if((uint64_t)dysym->extreloff+(uint64_t)dysym->nextrel*8u>slice_len) return -1;
+        char error[160];
+        if(im2_apply_external_relocs(d+dysym->extreloff,dysym->nextrel,nsyms,
+            external_word,external_symbol,&external,error,sizeof(error))) {
+            if(external.unresolved_objc_classes) l_error("Unresolved ObjC class/metaclass relocations");
+            l_error("External relocation rejected: %s",error);return -1;
         }
-    }
-    if (unresolved_objc_classes) {
-        l_error("Unresolved ObjC class/metaclass relocations: %u",
-                unresolved_objc_classes);
-        return -1;
     }
 
     // Validate the actual ObjC pointer sections after external relocations.

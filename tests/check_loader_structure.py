@@ -21,7 +21,7 @@ checks = {
     "No fixed slide references": "MACHO_SLIDE" not in s,
     "RBS1 validates full table": 'Validate ALL addresses before touching image memory' in s,
     "RBS1 missing fails closed": 'Required RBS1 table missing' in s,
-    "RBS1 import order correct": s.find('if (apply_rebase(rebase_path) != 0)') < s.find('// Resolve dynamic symbol imports'),
+    "RBS1 import order correct": 0 <= s.find('if (apply_rebase(rebase_path,dysym,d,slice_len) != 0)') < s.find('// Resolve dynamic symbol imports'),
     "Unresolved imports fatal": "Missing %u iOS import bindings; refusing guest execution" in s,
     "Load command envelope bounds checked": 'Invalid Mach-O load command envelope' in s,
     "Vita guest execution is gated": "IM2_ALLOW_UNVERIFIED_VM_EXEC" in s and "guest_exec_ready" in s,

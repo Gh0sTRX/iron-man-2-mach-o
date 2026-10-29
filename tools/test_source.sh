@@ -8,3 +8,8 @@ for test in check_loader_structure check_objc_dispatch test_objc_sections \
   python3 "tests/$test.py"
 done
 bash tools/test_objc_runtime.sh
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I vendor/ios-loader-boilerplate/source tests/test_external_reloc.c \
+  vendor/ios-loader-boilerplate/source/macho_reloc.c -o build/host-runtime/test_external_reloc
+build/host-runtime/test_external_reloc
