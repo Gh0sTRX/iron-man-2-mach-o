@@ -6,6 +6,8 @@ on:
     paths:
       - 'vendor/ios-loader-boilerplate/**'
       - 'tests/check_loader_structure.py'
+      - 'tests/test_import_audit_synthetic.py'
+      - 'tools/audit_ios_imports.py'
       - 'tools/check_vita_dependencies.sh'
       - '.github/workflows/loader-readiness.yml'
 permissions:
@@ -17,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Structural guard
-        run: python3 tests/check_loader_structure.py
+        run: |
+          python3 tests/check_loader_structure.py
+          python3 tests/test_import_audit_synthetic.py
       - name: Compile loader ARM objects using pinned VitaSDK series (no VPK)
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace vitasdk/vitasdk:2026.08 sh -lc '
