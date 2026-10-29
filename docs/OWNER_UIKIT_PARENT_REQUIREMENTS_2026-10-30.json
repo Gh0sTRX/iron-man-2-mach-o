@@ -1,0 +1,80 @@
+{
+  "source": "User-owned original Iron Man 2 iOS 1.0.0 decrypted executable",
+  "original_executable_sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "method": "LC_SEGMENT __objc_classlist -> objc_class class_ro_t instance_start/instance_size; LC_DYSYMTAB external relocation at superclass field resolves imported parent class names",
+  "scope": "Measured guest subclass instance_start; this constrains parent instance size but does not reconstruct UIKit private ivars or method behavior.",
+  "required_guest_subclasses": [
+    {
+      "guest_class": "EAGLView",
+      "imported_superclass": "UIView",
+      "instance_start": 36,
+      "instance_size": 128
+    },
+    {
+      "guest_class": "CatalogTableViewController",
+      "imported_superclass": "UIViewController",
+      "instance_start": 92,
+      "instance_size": 148
+    },
+    {
+      "guest_class": "CatalogViewController",
+      "imported_superclass": "UINavigationController",
+      "instance_start": 168,
+      "instance_size": 176
+    },
+    {
+      "guest_class": "GameInformationViewController",
+      "imported_superclass": "UIViewController",
+      "instance_start": 92,
+      "instance_size": 204
+    },
+    {
+      "guest_class": "GameTableViewController",
+      "imported_superclass": "UIViewController",
+      "instance_start": 92,
+      "instance_size": 116
+    },
+    {
+      "guest_class": "ReviewWriteViewController",
+      "imported_superclass": "UINavigationController",
+      "instance_start": 168,
+      "instance_size": 324
+    },
+    {
+      "guest_class": "ScreenshotView",
+      "imported_superclass": "UIImageView",
+      "instance_start": 40,
+      "instance_size": 48
+    },
+    {
+      "guest_class": "UIIconButton",
+      "imported_superclass": "UIButton",
+      "instance_start": 126,
+      "instance_size": 126
+    },
+    {
+      "guest_class": "WhatsNewViewController",
+      "imported_superclass": "UINavigationController",
+      "instance_start": 168,
+      "instance_size": 277
+    },
+    {
+      "guest_class": "GLLiveViewController",
+      "imported_superclass": "UINavigationController",
+      "instance_start": 168,
+      "instance_size": 204
+    }
+  ],
+  "additional_inheritance_assumptions_not_verified_from_guest_bytes": [
+    "UIResponder -> NSObject",
+    "UIView -> UIResponder",
+    "UIControl -> UIView",
+    "UIButton -> UIControl",
+    "UIImageView -> UIView",
+    "UIViewController -> UIResponder",
+    "UINavigationController -> UIViewController",
+    "UIWindow -> UIView"
+  ],
+  "physical_vita_verified": false,
+  "guest_arm_executed_by_native_loader": false
+}
