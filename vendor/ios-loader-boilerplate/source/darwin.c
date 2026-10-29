@@ -223,7 +223,7 @@ static int d_pthread_create(pthread_t *thr, const void *darwin_attr, void *fn, v
     pthread_attr_setstacksize(&attr, 512 * 1024); // iOS default 512 KB secondary thread stack
     int r = pthread_create(thr, &attr, thread_tramp, t);
     pthread_attr_destroy(&attr);
-    l_debug("pthread_create(0x%08X) -> %d", (unsigned)fn - MACHO_SLIDE, r);
+    l_debug("pthread_create(0x%08X) -> %d", (unsigned)fn - macho_get_runtime_slide(), r);
     return r;
 }
 static int d_pthread_detach(pthread_t t) {
