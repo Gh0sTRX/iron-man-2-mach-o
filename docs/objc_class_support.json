@@ -1,5 +1,5 @@
 {
-  "note": "Original counts inherited from prior audit, not remeasured this session. NSObject additionally supplies the host root class. Binding is not full behavior compatibility.",
+  "note": "Original counts from original Mach-O audit. Native NSURL implements strict parsing/file URL conversion but not networking, full RFC resolution or device behavior; class binding is not equivalent to complete Apple framework support.",
   "classes": [
     {
       "name": "NSString",
@@ -32,7 +32,7 @@
     {
       "name": "NSURL",
       "source_classref_slots": 10,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
