@@ -44,4 +44,7 @@ for name in ('objc_msgSend','objc_msgSend_stret','objc_msgSendSuper2','objc_msgS
 for name in ('objc_getClass','CFStringGetCString','CFRelease','CFRetain','NSClassFromString','objc_enumerationMutation'):
     target,kind=entries['_'+name]
     assert target and kind==0, (name,'C bridges must use the ABI thunk')
-print('PASS: linked ARM ELF contains four direct assembly dispatch imports and ordinary bridged C imports')
+assert '_UIApplicationMain' in entries
+entry,kind=entries['_UIApplicationMain']
+assert entry and kind==0, 'Legacy UIApplicationMain must bind to the nonempty native C launch stage'
+print('PASS: linked ARM ELF contains four direct assembly dispatch imports and bridged C and UIApplicationMain imports')
