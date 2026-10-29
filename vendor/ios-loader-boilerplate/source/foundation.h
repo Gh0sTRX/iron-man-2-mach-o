@@ -20,6 +20,8 @@ int im2_utf8_utf16_length(const char *,size_t bytes,uint32_t *length);
 int im2_string_get_cstring(const void *,char *out,size_t capacity,uint32_t encoding);
 void *im2_data_create(const void *bytes,size_t count,int autorelease);
 void *im2_data_from_file(const char *path,int autorelease);
+/* Uses the same configured iOS->Vita path mapper as NSData; no synthetic successes. */
+int im2_foundation_path_exists(const void *path_string);
 const void *im2_data_bytes(const void *);
 size_t im2_data_length(const void *);
 int im2_data_get_bytes(const void *,void *out,size_t length);
