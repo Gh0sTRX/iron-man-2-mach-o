@@ -229,6 +229,20 @@ static int apply_rebase(const char *rebase_path) {
             free(entries);
             return -1;
         }
+        // Every relocation payload must still reference the original guest image.
+        // Reject malformed pointers and arithmetic overflow before mutating ANY slot.
+        const uint32_t value = in_data ?
+            *(uint32_t *)(uintptr_t)(macho_slide + va) :
+            *(uint32_t *)(text_buf + (va - text_vm));
+        const uint32_t target_va = value & ~1u;
+        if (target_va < text_vm ||
+            (uint64_t)target_va >= (uint64_t)data_vm + data_size ||
+            (uint64_t)value + macho_slide > UINT32_MAX) {
+            l_error("RBS1 pointer payload invalid at 0x%08X: 0x%08X",
+                    (unsigned)va, (unsigned)value);
+            free(entries);
+            return -1;
+        }
         previous = va;
     }
     for (uint32_t i = 0; i < count; i++) {
@@ -401,10 +415,9 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     data_vm = seg_data->vmaddr;
     data_size = ALIGN(seg_data->vmsize, 0x1000);
 
-    l_info("__TEXT vm: 0x%08X (size 0x%08X) -> real 0x%08X",
-           (unsigned)text_vm, (unsigned)text_size, (unsigned)(macho_slide + text_vm));
-    l_info("__DATA vm: 0x%08X (size 0x%08X) -> real 0x%08X",
-           (unsigned)data_vm, (unsigned)data_size, (unsigned)(macho_slide + data_vm));
+    l_info("Guest __TEXT vm=0x%08X size=0x%08X; __DATA vm=0x%08X size=0x%08X",
+           (unsigned)text_vm, (unsigned)text_size,
+           (unsigned)data_vm, (unsigned)data_size);
 
     // Single allocation preserves __TEXT to __DATA virtual-address distance.
     const uint64_t text_end = (uint64_t)text_vm + text_size;
