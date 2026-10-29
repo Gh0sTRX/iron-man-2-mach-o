@@ -1,0 +1,24 @@
+{
+  "source": "Original user-owned Iron Man 2 iOS 1.0.0 decrypted Mach-O; 7,480,208 bytes",
+  "sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "verified_with": "llvm-objdump --macho --disassemble --dis-symname _main; objc metadata and direct Python ARM stub/CFString verification",
+  "original_main_arm_bl_vm": "0x51cd0",
+  "import_stub_vm": "0x47036c",
+  "import_name": "_UIApplicationMain",
+  "principalClassName": "nil",
+  "delegate_cfstring_vm": "0x4e1930",
+  "delegateClassName": "AppController",
+  "guest_delegate_class_vm": "0x4e4244",
+  "guest_delegate_instance_start": 4,
+  "guest_delegate_instance_size": 12,
+  "legacy_launch_selector": "applicationDidFinishLaunching:",
+  "legacy_selector_type_encoding": "v12@0:4@8",
+  "legacy_method_imp_vm": "0x504ec",
+  "new_native_components": [
+    "uikit_application.c",
+    "uikit_bootstrap.c"
+  ],
+  "original_arm_executed_in_native_loader": false,
+  "physical_vita_verified": false,
+  "app_event_loop_implemented": false
+}
