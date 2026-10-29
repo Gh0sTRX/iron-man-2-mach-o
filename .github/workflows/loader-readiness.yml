@@ -25,6 +25,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Python and shell syntax checks
+        run: |
+          python3 -m compileall -q tools tests
+          bash -n tools/build_loader_objects.sh
+          bash -n tools/check_vita_dependencies.sh
       - name: Structural guard
         run: |
           python3 tests/check_loader_structure.py
