@@ -18,7 +18,13 @@ with zipfile.ZipFile(args.ipa) as archive:
     data=archive.read("Payload/IronMan2.app/IronMan2")
 rbs=args.rbs1.read_bytes()
 assert module.preflight(data,rbs)
+# One RBS1 word points into __TEXT in the supported original 1.0.0 IPA.
+first_slot=struct.unpack_from("<I",rbs,8)[0]
+text_vm=0x1000
+bad_payload=bytearray(data)
+struct.pack_into("<I",bad_payload,first_slot-text_vm,0xffffffff)
 cases={
+    "RBS1 invalid pointer payload":(bytes(bad_payload),rbs),
     "bad Mach-O magic":(b"ABCD"+data[4:],rbs),
     "short Mach-O":(data[:12],rbs),
     "oversized command":(data[:32]+b"\xff"*4+data[36:],rbs),
