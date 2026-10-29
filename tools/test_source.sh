@@ -51,6 +51,14 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/foundation.c \
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_url_request
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_file_manager.c \
+  vendor/ios-loader-boilerplate/source/file_manager.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_file_manager
+build/host-runtime/test_file_manager
 build/host-runtime/test_url_request
 build/host-runtime/test_url
 
