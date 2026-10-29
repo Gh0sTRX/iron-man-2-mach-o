@@ -21,13 +21,14 @@
 #include "collections.h"
 #include "url.h"
 #include "url_request.h"
+#include "file_manager.h"
 #include "darwin.h"
 
 // ---------------------------------------------------------------- NSString
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[25];
+static import_entry class_imports[27];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -40,15 +41,16 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_NSMutableDictionary","_OBJC_METACLASS_$_NSMutableDictionary",
         "_OBJC_CLASS_$_NSURL","_OBJC_METACLASS_$_NSURL",
         "_OBJC_CLASS_$_NSURLRequest","_OBJC_METACLASS_$_NSURLRequest",
-        "_OBJC_CLASS_$_NSMutableURLRequest","_OBJC_METACLASS_$_NSMutableURLRequest"};
-    for(size_t i=0;i<24;i++) {
+        "_OBJC_CLASS_$_NSMutableURLRequest","_OBJC_METACLASS_$_NSMutableURLRequest",
+        "_OBJC_CLASS_$_NSFileManager","_OBJC_METACLASS_$_NSFileManager"};
+    for(size_t i=0;i<26;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[24]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[26]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -386,6 +388,7 @@ void objc_init(void) {
     if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
     if(im2_url_init(root,foundation_failure))fatal_error("NSURL registration failed");
     if(im2_url_request_init(root,foundation_failure))fatal_error("NSURLRequest registration failed");
+    if(im2_file_manager_init(root))fatal_error("NSFileManager registration failed");
     string_class=im2_objc_class_named("NSString");
     darwin_set_object_string_resolver(im2_string_utf8);
     const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
@@ -395,7 +398,7 @@ void objc_init(void) {
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<25;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<27;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 
