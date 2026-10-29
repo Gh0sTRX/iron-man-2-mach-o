@@ -58,6 +58,14 @@ def preflight(data, rbs):
     if any(x&3 or (i and x<=rebases[i-1]) or not (tv<=x<=tv+ts-4 or dv<=x<=dv+ds-4)
            for i,x in enumerate(rebases)):
         raise ValueError("Unsorted/duplicate/unaligned/out-of-range RBS1")
+    # Verify stored relocation targets, not just the slot addresses.
+    for va in rebases:
+        vm,vs,fo,fs=(tv,ts,tf,tfs) if va<dv else (dv,ds,df,dfs)
+        if va+4>vm+fs:
+            raise ValueError("RBS1 points to a slot outside the original file data")
+        value=struct.unpack_from("<I",data,fo+va-vm)[0]
+        if not (tv<=(value&~1)<dv+ds):
+            raise ValueError("RBS1 pointer payload outside the mapped guest image")
     rebase_set=set(rebases)
     local=[]
     external=[]
