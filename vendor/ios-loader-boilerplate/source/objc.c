@@ -22,13 +22,14 @@
 #include "url.h"
 #include "url_request.h"
 #include "file_manager.h"
+#include "uikit_hierarchy.h"
 #include "darwin.h"
 
 // ---------------------------------------------------------------- NSString
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[27];
+static import_entry class_imports[43];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -42,15 +43,23 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_NSURL","_OBJC_METACLASS_$_NSURL",
         "_OBJC_CLASS_$_NSURLRequest","_OBJC_METACLASS_$_NSURLRequest",
         "_OBJC_CLASS_$_NSMutableURLRequest","_OBJC_METACLASS_$_NSMutableURLRequest",
-        "_OBJC_CLASS_$_NSFileManager","_OBJC_METACLASS_$_NSFileManager"};
-    for(size_t i=0;i<26;i++) {
+        "_OBJC_CLASS_$_NSFileManager","_OBJC_METACLASS_$_NSFileManager",
+        "_OBJC_CLASS_$_UIResponder","_OBJC_METACLASS_$_UIResponder",
+        "_OBJC_CLASS_$_UIView","_OBJC_METACLASS_$_UIView",
+        "_OBJC_CLASS_$_UIControl","_OBJC_METACLASS_$_UIControl",
+        "_OBJC_CLASS_$_UIButton","_OBJC_METACLASS_$_UIButton",
+        "_OBJC_CLASS_$_UIImageView","_OBJC_METACLASS_$_UIImageView",
+        "_OBJC_CLASS_$_UIViewController","_OBJC_METACLASS_$_UIViewController",
+        "_OBJC_CLASS_$_UINavigationController","_OBJC_METACLASS_$_UINavigationController",
+        "_OBJC_CLASS_$_UIWindow","_OBJC_METACLASS_$_UIWindow"};
+    for(size_t i=0;i<42;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[26]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[42]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -394,11 +403,12 @@ void objc_init(void) {
     const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
     pool_class=im2_objc_register_class("NSAutoreleasePool",root,sizeof(Im2ObjcObject),pool_methods,2,NULL,0);
     if(!root || !string_class || !pool_class) fatal_error("ObjC class registry initialization failed");
+    if(im2_uikit_hierarchy_init(root,foundation_failure))fatal_error("UIKit superclass registration failed");
     bind_class_imports();
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<27;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<43;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 
