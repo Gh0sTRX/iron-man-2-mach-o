@@ -36,6 +36,14 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_foundation
 build/host-runtime/test_foundation
 
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_url.c \
+  vendor/ios-loader-boilerplate/source/url.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_url
+build/host-runtime/test_url
+
 python3 tests/test_preflight_synthetic.py
 
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
