@@ -35,8 +35,15 @@ static int native_or_guest_send(void *receiver,const char *selector,
             (uint32_t)(uintptr_t)receiver,(uint32_t)(uintptr_t)registered,
             (uint32_t)(uintptr_t)(has_arg?arg:NULL),0);
     } else if(has_arg) {
-        result=((uintptr_t(*)(void *,const char *,void *))target.imp)(
-            receiver,registered,arg);
+        /* The legacy delegate callback and setDelegate: are void methods;
+         * calling them through a pointer-returning prototype is undefined C. */
+        if(!strcmp(selector,"setDelegate:") ||
+           !strcmp(selector,"applicationDidFinishLaunching:"))
+            ((void(*)(void *,const char *,void *))target.imp)(
+                receiver,registered,arg);
+        else
+            result=((uintptr_t(*)(void *,const char *,void *))target.imp)(
+                receiver,registered,arg);
     } else {
         result=((uintptr_t(*)(void *,const char *))target.imp)(
             receiver,registered);
@@ -93,7 +100,8 @@ int im2_uikit_launch_once(int argc,char *const *argv,
     return IM2_UIKIT_BOOT_NEEDS_RUN_LOOP;
 fail:
     if(app)(void)native_or_guest_send(app,"setDelegate:",NULL,1,guest_bridge,NULL);
-    if(delegate && initialized==delegate)im2_objc_release(delegate);
+    if(delegate && im2_objc_retain_count(delegate)>0)
+        (void)im2_objc_release(delegate);
     launching=0;
     return IM2_UIKIT_BOOT_INVALID;
 }
