@@ -40,5 +40,10 @@ assert "tests/test_uikit_hierarchy.c" in runner,"UIKit host tests not wired"
 assert "im2_uikit_application_init(root,foundation_failure)" in src,"UIApplication state init missing"
 assert "source/uikit_application.c" in cmake,"UIApplication not in Vita ELF"
 assert "tests/test_uikit_application.c" in runner,"UIApplication tests not wired"
+assert "F(UIApplicationMain, ui_application_main)" in src,"UIApplicationMain import must have a real staged bootstrap"
+assert "im2_uikit_launch_once(argc,argv,principal_class_name," in src,"Missing delegate launch stage"
+assert "source/uikit_bootstrap.c" in cmake,"Bootstrap not compiled for Vita ELF"
+assert "tests/test_uikit_bootstrap.c" in runner,"Bootstrap behavioral tests absent"
+
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)
