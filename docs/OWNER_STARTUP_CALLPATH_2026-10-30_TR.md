@@ -49,7 +49,7 @@ Böylece doğrudan kendi `main` fonksiyonunun UIKit'i kullanmadığı varsayım�
 
 ## Sonraki gerçek boot engeli
 
-1. Güncel 24 C/ASM nesnesi ile ELF bağlantısını ve ASan/UBSan host testlerini CI'da doğrula.
+1. Güncel 25 C/ASM birimi ile ELF bağlantısını ve ASan/UBSan host testlerini CI'da doğrula.
 2. `_UIApplicationMain` girişini kullanıcıdan gelen app/ios argümanları ve delegate yaşam döngüsüne uygun gerçek event/bootstrap akışıyla bağla.
 3. Gerekli UIView/UIWindow/EAGLContext/CAEAGLLayer API'leri, `EAGLView` surface, render ve touch bağlamasını orijinal çağrı yerleriyle doğrula.
 4. Nesne sınıf kaydı, CFString, guest call ve bellek yürütme denetimlerinin gerçek Vita üzerinde geçtiğini logla.
