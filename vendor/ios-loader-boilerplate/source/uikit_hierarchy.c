@@ -26,6 +26,7 @@ static Im2ObjcClass *responder,*view,*control,*button,*image_view,
 static UiState *states;
 static pthread_mutex_t state_lock=PTHREAD_MUTEX_INITIALIZER;
 static void (*failure)(const char *);
+static int (*activate_window)(void *);
 
 static void fail(const char *why) {
     if(failure)failure(why);
@@ -71,6 +72,7 @@ static uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame
     if(!kind_of(self,view))fail("initWithFrame: receiver is not UIView");
     UiState *s=state_for(self,1);
     s->frame=frame;s->frame_valid=1;
+    if(kind_of(self,window_class))s->hidden=1;
     return (uintptr_t)self;
 }
 static void view_set_frame(void *self,const char *selector,Im2Rect32 frame) {
@@ -93,7 +95,7 @@ static uint32_t view_hidden(void *self,const char *selector) {
     (void)selector;
     if(!kind_of(self,view))fail("isHidden receiver is not UIView");
     UiState *s=state_for(self,0);
-    return s?(uint32_t)s->hidden:0;
+    return s?(uint32_t)s->hidden:(uint32_t)kind_of(self,window_class);
 }
 static void view_set_tag(void *self,const char *selector,int tag) {
     (void)selector;
@@ -108,6 +110,17 @@ static int view_tag(void *self,const char *selector) {
 }
 static void view_dealloc(void *self,const char *selector) {
     (void)selector;discard_state(self);
+}
+int im2_uikit_bind_window_activation(int (*callback)(void *)) {
+    if(!window_class || !callback || activate_window)return -1;
+    activate_window=callback;return 0;
+}
+static void window_make_key_and_visible(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,window_class))fail("makeKeyAndVisible requires UIWindow");
+    if(!activate_window || activate_window(self))
+        fail("makeKeyAndVisible cannot activate window without UIApplication");
+    view_set_hidden(self,"setHidden:",0);
 }
 static void controller_set_view(void *self,const char *selector,void *child) {
     (void)selector;
@@ -164,7 +177,8 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
     navigation_controller=reg("UINavigationController",view_controller,168,NULL,0);
     /* UIWindow's real ivar layout is not reconstructed; it inherits only
      * safe sidecar-backed UIView operations, not display activation. */
-    window_class=reg("UIWindow",view,36,NULL,0);
+    const Im2MethodSpec wm[]={METHOD("makeKeyAndVisible","v@:",window_make_key_and_visible)};
+    window_class=reg("UIWindow",view,36,wm,sizeof(wm)/sizeof(*wm));
     if(!window_class || !navigation_controller || !image_view || !button) {
         (void)im2_objc_registration_rollback(checkpoint);
         responder=view=control=button=image_view=view_controller=
