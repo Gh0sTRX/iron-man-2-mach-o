@@ -147,9 +147,19 @@ uintptr_t macho_sym(const char *name) {
         if ((s->n_type & N_TYPE) != N_SECT)
             continue;
         if (!strcmp(strtab + s->n_strx, name)) {
-            uintptr_t a = macho_slide + s->n_value;
-            if (s->n_desc & N_ARM_THUMB_DEF)
-                a |= 1;
+            const uint32_t va = s->n_value & ~1u;
+            const int valid_text = va >= text_vm &&
+                (uint64_t)va < (uint64_t)text_vm + text_size;
+            const int valid_data = va >= data_vm &&
+                (uint64_t)va < (uint64_t)data_vm + data_size;
+            if (!valid_text && !valid_data) {
+                l_error("Symbol %s points outside mapped Mach-O VM: 0x%08X",
+                        name, (unsigned)s->n_value);
+                return 0;
+            }
+            uintptr_t a = macho_slide + va;
+            if ((s->n_desc & N_ARM_THUMB_DEF) || (s->n_value & 1u))
+                a |= 1u;
             return a;
         }
     }
