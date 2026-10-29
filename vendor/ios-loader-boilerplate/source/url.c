@@ -46,6 +46,13 @@ static char *decode_path(const char *encoded,size_t len) {
     decoded[out]=0;
     return decoded;
 }
+/* NSString supports binary-safe UTF-8 buffers. A URL must never silently
+ * accept the prefix before an embedded NUL and discard the remaining bytes. */
+static const char *url_input(void *string) {
+    const char *value=im2_string_utf8(string);
+    if(!value || strlen(value)!=im2_string_byte_length(string))return NULL;
+    return value;
+}
 static void destroy_url(void *object) {
     Im2URL *u=object;
     free(u->absolute);free(u->scheme);free(u->path);
@@ -113,13 +120,13 @@ static int url_assign_file(Im2URL *u,const char *path) {
 }
 static uintptr_t init_string(Im2URL *self,const char *selector,void *string) {
     (void)selector;
-    const char *text=im2_string_utf8(string);
+    const char *text=url_input(string);
     if(!text || url_assign(self,text)) {im2_objc_release(self);return 0;}
     return (uintptr_t)self;
 }
 static uintptr_t init_file(Im2URL *self,const char *selector,void *string) {
     (void)selector;
-    const char *text=im2_string_utf8(string);
+    const char *text=url_input(string);
     if(!text || url_assign_file(self,text)) {im2_objc_release(self);return 0;}
     return (uintptr_t)self;
 }
@@ -127,7 +134,7 @@ static uintptr_t make_url(void *cls,void *input,int file) {
     if(cls!=url_class)return 0;
     Im2URL *u=im2_objc_alloc(url_class,destroy_url);
     if(!u)return 0;
-    const char *text=im2_string_utf8(input);
+    const char *text=url_input(input);
     if(!text || (file?url_assign_file(u,text):url_assign(u,text))) {
         im2_objc_release(u);return 0;
     }
