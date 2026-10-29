@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT. Independently authored; no Apple/Swift implementation copied. */
 #include "foundation.h"
 #include "cfstring.h"
+#include "url.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -183,7 +184,28 @@ static uintptr_t immutable_copy(void *self,const char *sel){(void)sel;return (ui
 static void string_dealloc(void *self,const char *sel){(void)sel;string_cleanup(self);}
 static uintptr_t data_factory(void *self,const char *sel,const void *b,size_t n){(void)self;(void)sel;return (uintptr_t)im2_data_create(b,n,1);}
 static uintptr_t data_empty(void *self,const char *sel){(void)self;(void)sel;return (uintptr_t)im2_data_create(NULL,0,1);}
-static uintptr_t data_file(void *self,const char *sel,void *path){(void)self;(void)sel;return (uintptr_t)im2_data_from_file(im2_string_utf8(path),1);}
+static uintptr_t data_file(void *self,const char *sel,void *path){
+    (void)self;(void)sel;
+    const char *text=im2_string_utf8(path);
+    if(!text || strlen(text)!=im2_string_byte_length(path))return 0;
+    return (uintptr_t)im2_data_from_file(text,1);
+}
+static uintptr_t data_url(void *self,const char *sel,void *url){
+    (void)self;(void)sel;
+    const char *path=im2_url_local_file_path(url);
+    /* Never treat http(s) or an unknown Objective-C receiver as a file. */
+    return (uintptr_t)(path?im2_data_from_file(path,1):NULL);
+}
+static uintptr_t data_init_url(Data *self,const char *sel,void *url){
+    (void)sel;
+    const char *path=im2_url_local_file_path(url);
+    void *loaded=path?im2_data_from_file(path,0):NULL;
+    if(!loaded){im2_objc_release(self);return 0;}
+    int rc=data_assign(self,im2_data_bytes(loaded),im2_data_length(loaded));
+    im2_objc_release(loaded);
+    if(rc){im2_objc_release(self);return 0;}
+    return (uintptr_t)self;
+}
 static uintptr_t data_init(Data *self,const char *sel,const void *b,size_t n){(void)sel;if(data_assign(self,b,n)){im2_objc_release(self);return 0;}return (uintptr_t)self;}
 static uintptr_t data_bytes(void *self,const char *sel){(void)sel;return (uintptr_t)im2_data_bytes(self);}
 static uintptr_t data_length(void *self,const char *sel){(void)sel;return im2_data_length(self);}
@@ -211,10 +233,13 @@ int im2_foundation_init(Im2ObjcClass *root,const Im2FoundationConfig *cfg) {
         M("copy","@@:",immutable_copy),M("dealloc","v@:",string_dealloc)};
     Im2MethodSpec scm[]={M("stringWithUTF8String:","@@:*",string_factory),M("stringWithFormat:","@@:@",cfg->string_format)};
     strings=im2_objc_register_class("NSString",root,sizeof(Im2String),sim,8,scm,cfg->string_format?2:1);
-    const Im2MethodSpec dim[]={M("initWithBytes:length:","@@:^vI",data_init),M("bytes","^v@:",data_bytes),M("length","I@:",data_length),
+    const Im2MethodSpec dim[]={M("initWithBytes:length:","@@:^vI",data_init),M("initWithContentsOfURL:","@@:@",data_init_url),
+        M("bytes","^v@:",data_bytes),M("length","I@:",data_length),
         M("getBytes:length:","v@:^vI",data_get),M("copy","@@:",immutable_copy),M("dealloc","v@:",data_dealloc)};
-    const Im2MethodSpec dcm[]={M("data","@@:",data_empty),M("dataWithBytes:length:","@@:^vI",data_factory),M("dataWithContentsOfFile:","@@:@",data_file)};
-    data_class=strings?im2_objc_register_class("NSData",root,sizeof(Data),dim,6,dcm,3):NULL;
+    const Im2MethodSpec dcm[]={M("data","@@:",data_empty),M("dataWithBytes:length:","@@:^vI",data_factory),
+        M("dataWithContentsOfFile:","@@:@",data_file),
+        M("dataWithContentsOfURL:","@@:@",data_url)};
+    data_class=strings?im2_objc_register_class("NSData",root,sizeof(Data),dim,7,dcm,4):NULL;
     const Im2MethodSpec bim[]={M("bundlePath","@@:",bundle_path),M("resourcePath","@@:",bundle_path),
         M("pathForResource:ofType:","@@:@@",bundle_resource),M("pathForResource:ofType:inDirectory:","@@:@@@",bundle_resource_dir),M("dealloc","v@:",bundle_dealloc)};
     const Im2MethodSpec bcm[]={M("mainBundle","@@:",bundle_main)};
