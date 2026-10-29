@@ -43,6 +43,7 @@
 #define THUNK_ARENA_SIZE 0x20000
 
 typedef struct {
+    uint32_t cmd, cmdsize;
     char segname[16];
     uint32_t vmaddr, vmsize, fileoff, filesize, maxprot, initprot, nsects, flags;
 } segment_command;
@@ -358,11 +359,11 @@ int macho_load(const char *bin_path, const char *rebase_path) {
         uint32_t *indirect = (uint32_t *)(d + dysym->indirectsymoff);
         for (int s_idx = 0; s_idx < nsects_total; s_idx++) {
             section *s = sects[s_idx];
-            if (s->type == S_NON_LAZY_SYMBOL_POINTERS || s->type == S_LAZY_SYMBOL_POINTERS) {
+            if ((s->flags & 0xffu) == S_NON_LAZY_SYMBOL_POINTERS || (s->flags & 0xffu) == S_LAZY_SYMBOL_POINTERS) {
                 uint32_t nslots = s->size / 4;
                 uint32_t *slots = (uint32_t *)(MACHO_SLIDE + s->addr);
                 for (uint32_t i = 0; i < nslots; i++) {
-                    uint32_t sym_idx = indirect[s->r1 + i];
+                    uint32_t sym_idx = indirect[s->reserved1 + i];
                     if (sym_idx & INDIRECT_SYMBOL_LOCAL) {
                         slots[i] += MACHO_SLIDE;
                     } else if (!(sym_idx & INDIRECT_SYMBOL_ABS)) {
@@ -404,7 +405,7 @@ void macho_run_inits(void) {
     uint32_t *funcs = (uint32_t *)mod_init_addr;
     for (uint32_t i = 0; i < mod_init_count; i++) {
         if (funcs[i]) {
-            uintptr_t fn = funcs[i] + MACHO_SLIDE;
+            uintptr_t fn = funcs[i];
             call_guest((void *)fn, 0, 0, 0, 0);
         }
     }
