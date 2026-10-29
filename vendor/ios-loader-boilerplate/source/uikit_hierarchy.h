@@ -11,3 +11,7 @@ typedef struct {float x,y,width,height;} Im2Rect32;
 /* Registers verified guest superclass identities, plus limited view state.
  * Registration must happen before parsing __objc_classlist. */
 int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*failure)(const char *));
+
+/* Internal observation for tests and eventual renderer; does not mimic CGRect
+ * return ABI. Returns -1 until a frame was explicitly initialized. */
+int im2_uikit_view_frame(const void *receiver,Im2Rect32 *out);
