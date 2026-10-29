@@ -9,6 +9,7 @@ on:
       - 'tests/check_objc_dispatch.py'
       - 'tests/test_objc_sections.py'
       - 'tests/check_objc_external_relocations.py'
+      - 'tests/test_objc_classref_bindings.py'
       - 'tools/audit_objc_classref_bindings.py'
       - 'tools/audit_objc_sections.py'
       - 'tests/test_import_audit_synthetic.py'
@@ -30,6 +31,7 @@ jobs:
           python3 tests/check_objc_dispatch.py
           python3 tests/test_objc_sections.py
           python3 tests/check_objc_external_relocations.py
+          python3 tests/test_objc_classref_bindings.py
           python3 tests/test_import_audit_synthetic.py
       - name: Compile loader ARM objects using pinned VitaSDK series (no VPK)
         run: |
