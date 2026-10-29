@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
     int res = macho_load(BUNDLE_PATH "game_exec", DATA_PATH "rebase.bin");
     if (res < 0) {
         // Fallback error if game binary cannot be accessed
-        fatal_error("Failed to load Mach-O executable at %s", BUNDLE_PATH "game_exec");
+        fatal_error("Mach-O preflight/compatibility failed (%d); no guest code executed: %s", res, BUNDLE_PATH "game_exec");
     }
 
     // Initialize game-specific hooks and memory patches
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
 
     if (entry) {
         l_info("Jumping to guest entry point at 0x%08X (Mach-O offset 0x%08X)",
-               (unsigned)entry, (unsigned)(entry - MACHO_SLIDE));
+               (unsigned)entry, (unsigned)(entry - macho_get_runtime_slide()));
         call_guest((void *)entry, 0, 0, 0, 0);
     } else {
         l_warn("Neither '_main' nor '_startClet' found; entering default event loop...");
