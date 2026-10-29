@@ -27,6 +27,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/imports.c
   source/darwin.c
   source/objc.c
+  source/objc_runtime.c
   source/gles.c
   source/coreaudio.c
   source/input.c
@@ -42,3 +43,17 @@ target_include_directories(im2_ios_loader_objects PRIVATE
 )
 target_compile_options(im2_ios_loader_objects PRIVATE -O2 -g -ffixed-r9)
 message(STATUS "Loader object compilation only. Link, RX validation and VPK are separate gates.")
+
+# Link the actual complete loader without creating SELF or VPK.
+option(IM2_LINK_LOADER "Link full research loader ELF" OFF)
+if(IM2_LINK_LOADER)
+  add_executable(im2_ios_loader $<TARGET_OBJECTS:im2_ios_loader_objects>)
+  target_link_options(im2_ios_loader PRIVATE -Wl,-q -Wl,-Map=${CMAKE_BINARY_DIR}/im2_ios_loader.map)
+  target_link_libraries(im2_ios_loader PRIVATE
+    -Wl,--whole-archive pthread -Wl,--no-whole-archive
+    vitaGL vitashark SceShaccCgExt stdc++ mathneon freetype png16 z bz2 m
+    kubridge_stub taihen_stub SceShaccCg_stub
+    SceAppMgr_stub SceCtrl_stub SceTouch_stub SceDisplay_stub SceSysmodule_stub
+    ScePower_stub SceKernelDmacMgr_stub SceGxm_stub SceCommonDialog_stub
+    SceAppUtil_stub SceAudio_stub SceIofilemgr_stub SceIme_stub)
+endif()

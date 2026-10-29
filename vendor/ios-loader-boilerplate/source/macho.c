@@ -417,6 +417,7 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                 l_error("================================================================");
                 l_error("CRITICAL ALERT: Binary contains FairPlay DRM encryption (cryptid %u)!", (unsigned)cryptid);
                 l_error("Cannot execute encrypted binary on PS Vita. Must be decrypted first.");
+                return -1;
                 l_error("================================================================");
             }
         }

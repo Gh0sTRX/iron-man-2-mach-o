@@ -15,13 +15,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile in existing Iron Man 2 VitaSDK image
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace vitasdk/vitasdk:2026.08 sh -lc 'cmake -S tests/vita_exec_probe -B build/probe -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake" -DCMAKE_BUILD_TYPE=Release && cmake --build build/probe --parallel 2'
-      - name: Verify VPK
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace vitasdk/vitasdk:2026.08 sh -lc 'cmake -S tests/vita_exec_probe -B build/probe -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake" -DCMAKE_BUILD_TYPE=Release && cmake --build build/probe --target im2_exec_probe --parallel 2'
+      - name: Verify ELF without packaging
         run: |
-          test -s build/probe/im2_exec_probe.vpk
-          unzip -Z1 build/probe/im2_exec_probe.vpk | grep -Fx eboot.bin
+          test -s build/probe/im2_exec_probe
+          test ! -f build/probe/im2_exec_probe.vpk
+          test ! -f build/probe/eboot.bin
       - uses: actions/upload-artifact@v4
         with:
-          name: im2-exec-probe-vpk
-          path: build/probe/im2_exec_probe.vpk
+          name: im2-exec-probe-elf
+          path: build/probe/im2_exec_probe
           if-no-files-found: error

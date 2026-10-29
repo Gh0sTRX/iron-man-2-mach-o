@@ -78,3 +78,36 @@ ml_align_call:
     blx     ip
     mov     sp, r4
     pop     {r4-r8, r10, r11, pc}
+
+@ Class-specific host IMP dispatch. Preserve original registers and stack arguments.
+    .global im2_objc_msgSend_entry
+    .type im2_objc_msgSend_entry, %function
+im2_objc_msgSend_entry:
+    cmp r0, #0
+    moveq r1, #0
+    bxeq lr
+    push {r0-r3, r4, lr}
+    mov r4, sp
+    bic sp, sp, #7
+    mov r2, #0
+    bl im2_objc_lookup_imp
+    mov sp, r4
+    mov ip, r0
+    pop {r0-r3, r4, lr}
+    b ml_align_call
+    .global im2_objc_msgSend_stret_entry
+    .type im2_objc_msgSend_stret_entry, %function
+im2_objc_msgSend_stret_entry:
+    cmp r1, #0
+    bxeq lr
+    push {r0-r3, r4, lr}
+    mov r4, sp
+    bic sp, sp, #7
+    mov r0, r1
+    mov r1, r2
+    mov r2, #1
+    bl im2_objc_lookup_imp
+    mov sp, r4
+    mov ip, r0
+    pop {r0-r3, r4, lr}
+    b ml_align_call

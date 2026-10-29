@@ -177,12 +177,13 @@ static int as_GetProperty(uint32_t id, uint32_t *size, void *data) {
         *(float *)data = 0.012f;
         break;
     default:
-        l_debug("AudioSessionGetProperty('%c%c%c%c') -> 0", id >> 24, (id >> 16) & 0xFF, (id >> 8) & 0xFF, id & 0xFF);
+        l_info("AudioSessionGetProperty('%c%c%c%c') -> 0", id >> 24, (id >> 16) & 0xFF, (id >> 8) & 0xFF, id & 0xFF);
     }
     return 0;
 }
 
-#define F(name, fn) {"_" #name, (uintptr_t)(fn)}
+#undef F
+#define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
 
 const import_entry coreaudio_imports[] = {
     F(AudioComponentFindNext, au_FindNext), F(AudioComponentInstanceNew, au_InstanceNew),

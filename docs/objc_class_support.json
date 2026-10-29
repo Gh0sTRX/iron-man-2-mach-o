@@ -1,0 +1,453 @@
+{
+  "note": "Original counts inherited from prior audit, not remeasured this session. NSObject additionally supplies the host root class. Binding is not full behavior compatibility.",
+  "classes": [
+    {
+      "name": "NSString",
+      "source_classref_slots": 22,
+      "status": "partial_host_runtime",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSAutoreleasePool",
+      "source_classref_slots": 14,
+      "status": "partial_host_runtime",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIDevice",
+      "source_classref_slots": 13,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIColor",
+      "source_classref_slots": 11,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSURL",
+      "source_classref_slots": 10,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIAlertView",
+      "source_classref_slots": 8,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIApplication",
+      "source_classref_slots": 8,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIActivityIndicatorView",
+      "source_classref_slots": 7,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIFont",
+      "source_classref_slots": 7,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIView",
+      "source_classref_slots": 7,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSData",
+      "source_classref_slots": 6,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UILabel",
+      "source_classref_slots": 6,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSLocale",
+      "source_classref_slots": 5,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSURLConnection",
+      "source_classref_slots": 5,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIButton",
+      "source_classref_slots": 5,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIImageView",
+      "source_classref_slots": 5,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSBundle",
+      "source_classref_slots": 4,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSMutableData",
+      "source_classref_slots": 4,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSTimer",
+      "source_classref_slots": 4,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSURLRequest",
+      "source_classref_slots": 4,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIImage",
+      "source_classref_slots": 4,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSNotificationCenter",
+      "source_classref_slots": 3,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSThread",
+      "source_classref_slots": 3,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "SKPaymentQueue",
+      "source_classref_slots": 3,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "EAGLContext",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "MPMusicPlayerController",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSFileManager",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSMutableString",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSMutableURLRequest",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSSet",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UITableView",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UITableViewCell",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UITextView",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIViewController",
+      "source_classref_slots": 2,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "CAEAGLLayer",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "MPMediaItemCollection",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "MPMediaLibrary",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "MPMediaQuery",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "MPMoviePlayerController",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSArray",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSAssertionHandler",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSCharacterSet",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSDate",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSDateFormatter",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSDictionary",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSIndexPath",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSMutableArray",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSMutableDictionary",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSNumber",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSNumberFormatter",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSPredicate",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSRunLoop",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSScanner",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "NSUserDefaults",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "SKPayment",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "SKProductsRequest",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIAccelerometer",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIImagePickerController",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIScreen",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIScrollView",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UITabBarController",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UITextField",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIWebView",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    },
+    {
+      "name": "UIWindow",
+      "source_classref_slots": 1,
+      "status": "not_implemented",
+      "original_guest_behavior_verified": false,
+      "physical_vita_verified": false
+    }
+  ]
+}

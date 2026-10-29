@@ -5,42 +5,36 @@ on:
     branches: [experiment/ios-macho-loader]
     paths:
       - 'vendor/ios-loader-boilerplate/**'
-      - 'tests/check_loader_structure.py'
-      - 'tests/check_objc_dispatch.py'
-      - 'tests/test_objc_sections.py'
-      - 'tests/check_objc_external_relocations.py'
-      - 'tests/test_objc_classref_bindings.py'
-      - 'tools/audit_objc_classref_bindings.py'
-      - 'tools/audit_objc_sections.py'
-      - 'tests/test_import_audit_synthetic.py'
-      - 'tools/audit_ios_imports.py'
-      - 'tools/check_vita_dependencies.sh'
-      - 'tools/build_loader_objects.sh'
+      - 'tests/**'
+      - 'tools/**'
       - '.github/workflows/loader-readiness.yml'
 permissions:
   contents: read
 jobs:
-  loader-objects:
+  loader-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Python and shell syntax checks
+      - name: Source and host runtime checks with ASan and UBSan
+        run: bash tools/test_source.sh
+      - name: Full VitaSDK ARM ELF link and production assembly test fixture
         run: |
-          python3 -m compileall -q tools tests
-          bash -n tools/build_loader_objects.sh
-          bash -n tools/check_vita_dependencies.sh
-      - name: Structural guard
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+            vitasdk/vitasdk@sha256:8227da1b596d981f4513cd9b36bda1e43857f6dae5bcf4312c1cd40167f7d9bb \
+            bash -c 'set -e; bash tools/build_loader_elf.sh; bash tools/build_arm_dispatch_test.sh'
+      - name: Execute real ARM and Thumb assembly with synthetic inputs
         run: |
-          python3 tests/check_loader_structure.py
-          python3 tests/check_objc_dispatch.py
-          python3 tests/test_objc_sections.py
-          python3 tests/check_objc_external_relocations.py
-          python3 tests/test_objc_classref_bindings.py
-          python3 tests/test_import_audit_synthetic.py
-      - name: Compile loader ARM objects using pinned VitaSDK series (no VPK)
+          python3 -m venv build/arm-test-python
+          build/arm-test-python/bin/pip install unicorn==2.1.4
+          build/arm-test-python/bin/python tests/test_arm_dispatch.py \
+            --binary build/arm-dispatch/glue.bin --symbols build/arm-dispatch/symbols.txt
+      - name: VPK remains blocked by missing runtime and hardware evidence
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace vitasdk/vitasdk:2026.08 sh -lc '
-            set -eu
-            bash tools/build_loader_objects.sh
-          '
+          if python3 tools/check_vpk_release_gates.py --evidence docs/vpk_release_evidence.json; then
+            echo 'Unexpected release readiness; hardware evidence requires independent review' >&2
+            exit 1
+          fi
+          test ! -f build/loader-full/eboot.bin
+          test -z "$(find build -name '*.vpk' -print -quit)"

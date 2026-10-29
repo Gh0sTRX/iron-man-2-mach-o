@@ -1,10 +1,34 @@
 {
-  "loader_objects_compiled": {"passed": false, "evidence": ""},
-  "loader_elf_linked": {"passed": false, "evidence": ""},
-  "all_original_imports_bound": {"passed": false, "evidence": ""},
-  "objc_runtime_validated": {"passed": false, "evidence": ""},
-  "rbs1_on_device_verified": {"passed": false, "evidence": ""},
-  "guest_rx_cache_verified": {"passed": false, "evidence": ""},
-  "graphics_input_audio_verified": {"passed": false, "evidence": ""},
-  "legal_assets_provenance_verified": {"passed": false, "evidence": ""}
+  "loader_objects_compiled": {
+    "passed": true,
+    "evidence": "docs/BUILD_EVIDENCE_2026-10-29.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
+  },
+  "loader_elf_linked": {
+    "passed": true,
+    "evidence": "docs/BUILD_EVIDENCE_2026-10-29.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
+  },
+  "all_original_imports_bound": {
+    "passed": false,
+    "evidence": ""
+  },
+  "objc_runtime_validated": {
+    "passed": false,
+    "evidence": ""
+  },
+  "rbs1_on_device_verified": {
+    "passed": false,
+    "evidence": ""
+  },
+  "guest_rx_cache_verified": {
+    "passed": false,
+    "evidence": ""
+  },
+  "graphics_input_audio_verified": {
+    "passed": false,
+    "evidence": ""
+  },
+  "legal_assets_provenance_verified": {
+    "passed": false,
+    "evidence": ""
+  }
 }

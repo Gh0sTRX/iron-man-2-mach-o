@@ -16,6 +16,7 @@
 #include "gles.h"
 #include "hle.h"
 #include "imports.h"
+#include "objc.h"
 #include "log.h"
 
 #define FB_W 320
@@ -275,8 +276,10 @@ void gles_present(void) {
 
 // ---------------------------------------------------------------- import table
 
-#define F(name, fn) {"_" #name, (uintptr_t)(fn)}
-#define D(name) {"_" #name, (uintptr_t)(name)}
+#undef F
+#define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
+#undef D
+#define D(name) {"_" #name, (uintptr_t)(name), 0}
 
 const import_entry gles_imports[] = {
     // Integer/pointer-only GLES1 calls share the ARM register ABI.

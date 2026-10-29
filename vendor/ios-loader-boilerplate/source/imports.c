@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "imports.h"
+#include "objc.h"
 
 static const struct {
     const import_entry *table;
@@ -26,5 +27,5 @@ const import_entry *imports_lookup(const char *name) {
                 return &tables[t].table[i];
         }
     }
-    return NULL;
+    return objc_class_import(name);
 }

@@ -87,15 +87,16 @@ int main(int argc, char *argv[]) {
     gles_init();
     darwin_init();
     input_init();
+    objc_init();
 
     // Load guest Mach-O executable
     // Note: Executable is loaded from inside bundle game_app/
     // or custom filename configured in patch.c / CMakeLists
     l_info("Loading primary Mach-O executable...");
-    int res = macho_load(BUNDLE_PATH "game_exec", DATA_PATH "rebase.bin");
+    int res = macho_load(BUNDLE_PATH "IronMan2", DATA_PATH "rebase.bin");
     if (res < 0) {
         // Fallback error if game binary cannot be accessed
-        fatal_error("Mach-O preflight/compatibility failed (%d); no guest code executed: %s", res, BUNDLE_PATH "game_exec");
+        fatal_error("Mach-O preflight/compatibility failed (%d); no guest code executed: %s", res, BUNDLE_PATH "IronMan2");
     }
 
     // Initialize game-specific hooks and memory patches
@@ -114,7 +115,9 @@ int main(int argc, char *argv[]) {
     if (entry) {
         l_info("Jumping to guest entry point at 0x%08X (Mach-O offset 0x%08X)",
                (unsigned)entry, (unsigned)(entry - macho_get_runtime_slide()));
-        call_guest((void *)entry, 0, 0, 0, 0);
+        static char arg0[]=BUNDLE_PATH "IronMan2";
+        static char *guest_argv[]={arg0,NULL};
+        call_guest((void *)entry, 1, (uint32_t)guest_argv, 0, 0);
     } else {
         l_warn("Neither '_main' nor '_startClet' found; entering default event loop...");
     }

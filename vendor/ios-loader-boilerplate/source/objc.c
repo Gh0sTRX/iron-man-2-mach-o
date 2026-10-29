@@ -27,6 +27,8 @@
 #include "imports.h"
 #include "log.h"
 #include "macho.h"
+#include "objc_runtime.h"
+#include "objc.h"
 
 // ---------------------------------------------------------------- NSString
 
@@ -37,20 +39,19 @@ typedef struct {
     uint32_t len;
 } ns_string;
 
-// Autorelease ring buffer: NSString instances in iOS are autoreleased; here they live in a ring
-// buffer of 256 entries. If long-term persistence is needed, migrate to dedicated malloc.
+static Im2ObjcClass *string_class, *pool_class;
+static void ns_destroy(void *pointer) { free(((ns_string *)pointer)->str); }
 static ns_string *ns_new(const char *s) {
-    static ns_string ring[256];
-    static int next;
-    ns_string *o = &ring[next++ & 255];
-    free(o->str);
-    o->str = strdup(s ? s : "");
-    o->len = strlen(o->str);
-    o->flags = 0x7C8;
+    ns_string *o=im2_objc_alloc(string_class,ns_destroy);
+    if(!o) fatal_error("NSString allocation failed");
+    o->str=strdup(s?s:"");
+    if(!o->str) fatal_error("NSString buffer allocation failed");
+    o->len=(uint32_t)strlen(o->str); o->flags=0x7c8;
+    if(!im2_objc_autorelease(o)) fatal_error("NSString autorelease without active thread pool");
     return o;
 }
 
-static const char *ns_cstr(const void *o) { return o ? ((const ns_string *)o)->str : ""; }
+static const char *ns_cstr(const void *o) { return o && ((const ns_string *)o)->str ? ((const ns_string *)o)->str : ""; }
 
 static uint32_t utf8_next(const unsigned char **p) {
     const unsigned char *s = *p;
@@ -312,7 +313,7 @@ static void log_unknown(void *self, const char *sel) {
 
 static int sel_is(const char *sel, const char *name) { return sel && name && !strcmp(sel, name); }
 
-static uint32_t objc_msgSend(void *self, const char *sel, ...) {
+static uint32_t string_message(void *self, const char *sel, ...) {
     va_list ap;
     va_start(ap, sel);
     // Do not read a variadic argument for zero-argument selectors.
@@ -377,7 +378,7 @@ static uint32_t objc_msgSend(void *self, const char *sel, ...) {
 }
 
 // Methods returning composite structs (CGSize/CGPoint): first argument is return pointer.
-static void objc_msgSend_stret(float *ret, void *self, const char *sel, ...) {
+static void string_message_stret(float *ret, void *self, const char *sel, ...) {
     if (!ret)
         return;
     if (!sel) {
@@ -406,12 +407,84 @@ static void objc_msgSend_stret(float *ret, void *self, const char *sel, ...) {
     va_end(ap);
 }
 
+// Explicit class-specific runtime. UIKit and guest-defined classes remain unsupported.
+static void *object_alloc(Im2ObjcClass *self,const char *sel) {
+    (void)sel; return im2_objc_alloc(self,self==string_class?ns_destroy:NULL);
+}
+static void *object_init(void *self,const char *sel) { (void)sel; return self; }
+static void *object_retain(void *self,const char *sel) { (void)sel; return im2_objc_retain(self); }
+static void object_release(void *self,const char *sel) {
+    (void)sel;
+    if(((Im2ObjcObject *)self)->isa==pool_class) {
+        if(im2_objc_pool_drain(self)) fatal_error("Invalid autorelease pool release order");
+    } else if(im2_objc_release(self)) fatal_error("release on unknown Objective-C object");
+}
+static void *object_autorelease(void *self,const char *sel) {
+    (void)sel; if(!im2_objc_autorelease(self)) fatal_error("autorelease without active pool"); return self;
+}
+static Im2ObjcClass *object_class(void *self,const char *sel) { (void)sel; return ((Im2ObjcObject *)self)->isa; }
+static Im2ObjcClass *class_class(Im2ObjcClass *self,const char *sel) { (void)sel;return self; }
+static uint32_t object_responds(void *self,const char *sel,const char *query) {
+    (void)sel;return im2_objc_lookup(self,query,NULL)!=NULL;
+}
+static void *pool_init(void *self,const char *sel) {
+    (void)sel; if(im2_objc_pool_push(self)) fatal_error("Autorelease pool initialization failed");return self;
+}
+static void *im2_get_class(const char *name) { return im2_objc_class_named(name); }
+static void *im2_get_metaclass(const char *name) {
+    Im2ObjcClass *c=im2_objc_class_named(name);return c?c->isa:NULL;
+}
+static const char *im2_selector_name(const char *name) {return name;}
+extern void im2_objc_msgSend_entry(void),im2_objc_msgSend_stret_entry(void);
+uintptr_t im2_objc_lookup_imp(void *self,const char *selector,uint32_t stret) {
+    size_t result_size=0;
+    Im2Imp imp=im2_objc_lookup(self,selector,&result_size);
+    if(!imp || !!stret != !!result_size)
+        fatal_error("Unsupported ObjC receiver/selector/return ABI: %p %s stret=%u",self,selector?selector:"(null)",(unsigned)stret);
+    return (uintptr_t)imp;
+}
+#define METHOD(sel,types,imp) {sel,types,(Im2Imp)(imp),0}
+void objc_init(void) {
+    if(string_class) return;
+    const Im2MethodSpec root_instance[]={
+        METHOD("init","@@:",object_init),METHOD("retain","@@:",object_retain),
+        METHOD("release","v@:",object_release),METHOD("autorelease","@@:",object_autorelease),
+        METHOD("class","#@:",object_class),METHOD("respondsToSelector:","c@::",object_responds)};
+    const Im2MethodSpec root_class[]={METHOD("alloc","@@:",object_alloc),METHOD("class","#@:",class_class)};
+    Im2ObjcClass *root=im2_objc_register_class("NSObject",NULL,sizeof(Im2ObjcObject),
+        root_instance,6,root_class,2);
+    const Im2MethodSpec strings[]={METHOD("UTF8String","*@:",string_message),
+        METHOD("length","I@:",string_message),METHOD("getCString:maxLength:encoding:","c@:*II",string_message)};
+    const Im2MethodSpec string_factory[]={METHOD("stringWithUTF8String:","@@:*",string_message),
+        METHOD("stringWithFormat:","@@:@",string_message)};
+    string_class=im2_objc_register_class("NSString",root,sizeof(ns_string),strings,3,string_factory,2);
+    const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
+    pool_class=im2_objc_register_class("NSAutoreleasePool",root,sizeof(Im2ObjcObject),pool_methods,2,NULL,0);
+    if(!root || !string_class || !pool_class) fatal_error("ObjC class registry initialization failed");
+}
+const import_entry *objc_class_import(const char *name) {
+    static import_entry entries[6];
+    static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
+        "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
+        "_OBJC_CLASS_$_NSAutoreleasePool","_OBJC_METACLASS_$_NSAutoreleasePool"};
+    if(!string_class || !name) return NULL;
+    Im2ObjcClass *objects[]={im2_objc_class_named("NSObject"),string_class,pool_class};
+    for(size_t i=0;i<6;i++) if(!strcmp(name,names[i])) {
+        entries[i]=(import_entry){names[i],(uintptr_t)(i&1?objects[i/2]->isa:objects[i/2]),1};
+        return &entries[i];
+    }
+    return NULL; /* Never fabricate the other 62 required framework classes. */
+}
+
 // ---------------------------------------------------------------- table
 
-#define F(name, fn) {"_" #name, (uintptr_t)(fn)}
+#undef F
+#define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
 
 const import_entry objc_imports[] = {
-    F(objc_msgSend, objc_msgSend), F(objc_msgSend_stret, objc_msgSend_stret),
+    F(objc_msgSend, im2_objc_msgSend_entry), F(objc_msgSend_stret, im2_objc_msgSend_stret_entry),
+    F(objc_getClass, im2_get_class), F(objc_getMetaClass, im2_get_metaclass),
+    F(sel_registerName, im2_objc_sel_register), F(sel_getName, im2_selector_name),
     F(CGBitmapContextCreate, cg_BitmapContextCreate), F(CGContextRelease, cg_ContextRelease),
     F(CGContextSetGrayFillColor, cg_SetGrayFillColor), F(CGContextSetTextDrawingMode, cg_noop),
     F(CGColorSpaceCreateDeviceGray, cg_ColorSpaceCreate), F(CGColorSpaceCreateDeviceRGB, cg_ColorSpaceCreate),

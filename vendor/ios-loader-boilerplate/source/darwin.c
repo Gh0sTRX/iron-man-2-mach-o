@@ -42,7 +42,7 @@ const char *darwin_path(const char *in, char *out, size_t outlen) {
 static FILE *d_fopen(const char *path, const char *mode) {
     char p[512];
     FILE *f = fopen(darwin_path(path, p, sizeof(p)), mode);
-    l_debug("fopen(%s, %s) -> %p", p, mode, f);
+    l_info("fopen(%s, %s) -> %p", p, mode, f);
     return f;
 }
 
@@ -223,7 +223,7 @@ static int d_pthread_create(pthread_t *thr, const void *darwin_attr, void *fn, v
     pthread_attr_setstacksize(&attr, 512 * 1024); // iOS default 512 KB secondary thread stack
     int r = pthread_create(thr, &attr, thread_tramp, t);
     pthread_attr_destroy(&attr);
-    l_debug("pthread_create(0x%08X) -> %d", (unsigned)fn - macho_get_runtime_slide(), r);
+    l_info("pthread_create(0x%08X) -> %d", (unsigned)fn - macho_get_runtime_slide(), r);
     return r;
 }
 static int d_pthread_detach(pthread_t t) {
@@ -305,7 +305,7 @@ static void d_Block_object_dispose(void *obj, int flags) {}
 
 static uint8_t d_dispatch_main_q[64];
 static void *d_dispatch_get_global_queue(long prio, unsigned long flags) { return d_dispatch_main_q; }
-static void d_dispatch_async(void *q, void *block) { l_debug("dispatch_async ignored"); }
+static void d_dispatch_async(void *q, void *block) { l_info("dispatch_async ignored"); }
 
 // ---------------------------------------------------------------- libgcc softfp (Apple *vfp)
 
@@ -371,8 +371,10 @@ SOFTFP static double m_ldexp(double x, int e) { return ldexp(x, e); }
 // ---------------------------------------------------------------- import table
 
 // name without Mach-O prepended "_": F(__divsi3, ...) registers "___divsi3".
-#define F(name, fn) {"_" #name, (uintptr_t)(fn)}
-#define D(name) {"_" #name, (uintptr_t)(name)} // identical signature in newlib
+#undef F
+#define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
+#undef D
+#define D(name) {"_" #name, (uintptr_t)(name), 0} // identical signature in newlib
 #define V(name, ptr) {"_" #name, (uintptr_t)(ptr), 1} // data symbol, not function
 
 const import_entry darwin_imports[] = {

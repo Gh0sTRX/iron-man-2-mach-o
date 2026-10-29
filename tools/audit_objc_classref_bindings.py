@@ -72,7 +72,7 @@ def inspect(data):
             if symbol_idx>=nsyms:raise ValueError("External relocation symbol out of range")
             start=u32(data,symoff+symbol_idx*12)
             if start>=strsize:raise ValueError("Relocation string index out of range")
-            end=data.find(b"\\0",stroff+start,stroff+strsize)
+            end=data.find(b"\0",stroff+start,stroff+strsize)
             if end<0:raise ValueError("Unterminated relocation symbol")
             extrel[reloc_addr]=data[stroff+start:end].decode("utf8","replace")
     results=[]

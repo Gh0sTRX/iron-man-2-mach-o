@@ -5,9 +5,9 @@
 #pragma once
 
 #ifndef DATA_PATH
-#define DATA_PATH "ux0:data/ios_game/"
+#define DATA_PATH "ux0:data/ironman2_macho/"
 #endif
 
-#define BUNDLE_PATH DATA_PATH "game_app/"
+#define BUNDLE_PATH DATA_PATH "IronMan2.app/"
 #define DOCS_PATH   DATA_PATH "saves/"
 #define LOGS_PATH   DATA_PATH "logs/"
