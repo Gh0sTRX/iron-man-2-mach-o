@@ -546,6 +546,26 @@ int macho_load(const char *bin_path, const char *rebase_path) {
         return -1;
     }
 
+    // Validate the actual ObjC pointer sections after external relocations.
+    // A missing/unsupported relocation must not leave a nil classref behind.
+    for (int sec_idx = 0; sec_idx < nsects_total; sec_idx++) {
+        const section *sec = sects[sec_idx];
+        if (strcmp(sec->sectname, "__objc_classrefs") &&
+            strcmp(sec->sectname, "__objc_superrefs"))
+            continue;
+        if ((sec->size & 3u) || sec->addr < data_vm ||
+            (uint64_t)sec->addr + sec->size > (uint64_t)data_vm + data_size)
+            return -1;
+        const uint32_t *refs = (const uint32_t *)(uintptr_t)(macho_slide + sec->addr);
+        for (uint32_t i = 0; i < sec->size / 4u; i++) {
+            if (!refs[i]) {
+                l_error("Unbound ObjC class reference at 0x%08X",
+                        (unsigned)(sec->addr + i * 4u));
+                return -1;
+            }
+        }
+    }
+
     // Resolve dynamic symbol imports. Unknown iOS APIs are fatal to readiness:
     // a zero-returning fallback thunk would hide a broken compatibility layer.
     unsigned unresolved_imports = 0;
