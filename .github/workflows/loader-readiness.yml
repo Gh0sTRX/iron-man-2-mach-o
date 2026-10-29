@@ -6,6 +6,7 @@ on:
     paths:
       - 'vendor/ios-loader-boilerplate/**'
       - 'tests/check_loader_structure.py'
+      - 'tests/check_objc_dispatch.py'
       - 'tests/test_import_audit_synthetic.py'
       - 'tools/audit_ios_imports.py'
       - 'tools/check_vita_dependencies.sh'
@@ -21,6 +22,7 @@ jobs:
       - name: Structural guard
         run: |
           python3 tests/check_loader_structure.py
+          python3 tests/check_objc_dispatch.py
           python3 tests/test_import_audit_synthetic.py
       - name: Compile loader ARM objects using pinned VitaSDK series (no VPK)
         run: |
