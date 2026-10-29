@@ -75,6 +75,16 @@ int main(void) {
     assert(!send1(cls,"URLWithString:",remote));
     assert(!send1(cls,"URLWithString:",spaces));
     assert(!send1(cls,"URLWithString:",NULL));
+    static const char embedded[]="https://example.com/safe\\0ignored";
+    void *binary=im2_string_create_bytes(embedded,sizeof(embedded)-1,0);
+    assert(binary && im2_string_byte_length(binary)==sizeof(embedded)-1);
+    assert(!send1(cls,"URLWithString:",binary));
+    assert(!send1(cls,"fileURLWithPath:",binary));
+    void *root_path=im2_string_create("/",0);
+    void *root_url=send1(cls,"fileURLWithPath:",root_path);
+    assert(root_url && boolean(root_url,"isFileURL"));
+    expect_string(root_url,"absoluteString","file:///");
+    expect_string(root_url,"path","/");
 
     /* initWithString: owns the same immutable path/scheme representation. */
     void *allocated=im2_objc_alloc(cls,destroy);
@@ -90,6 +100,8 @@ int main(void) {
     assert(!im2_objc_release(badzero));
     assert(!im2_objc_release(remote));
     assert(!im2_objc_release(spaces));
+    assert(!im2_objc_release(binary));
+    assert(!im2_objc_release(root_path));
     assert(!im2_objc_pool_drain(pool));
     puts("PASS: NSURL class imports, URL/path parsing, file encoding, copy ownership and invalid-input rejection");
 }
