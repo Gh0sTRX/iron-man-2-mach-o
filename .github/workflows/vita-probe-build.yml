@@ -1,0 +1,27 @@
+name: VitaSDK probe build
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tests/vita_exec_probe/**'
+      - '.github/workflows/vita-probe-build.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile in existing Iron Man 2 VitaSDK image
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace vitasdk/vitasdk:2026.08 sh -lc 'cmake -S tests/vita_exec_probe -B build/probe -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake" -DCMAKE_BUILD_TYPE=Release && cmake --build build/probe --parallel 2'
+      - name: Verify VPK
+        run: |
+          test -s build/probe/im2_exec_probe.vpk
+          unzip -Z1 build/probe/im2_exec_probe.vpk | grep -Fx eboot.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: im2-exec-probe-vpk
+          path: build/probe/im2_exec_probe.vpk
+          if-no-files-found: error
