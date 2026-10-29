@@ -155,7 +155,15 @@ uintptr_t macho_sym(const char *name) {
 }
 
 void macho_hook(const char *name, void *dst) {
+    if (!guest_exec_ready) {
+        l_error("macho_hook blocked: guest execution not verified");
+        return;
+    }
     uintptr_t a = macho_sym(name);
+    if (a & 1u) {
+        l_error("macho_hook cannot write ARM trampoline over Thumb code");
+        return;
+    }
     if (!a) {
         l_warn("macho_hook: symbol '%s' not found", name);
         return;
@@ -442,14 +450,22 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     if (apply_rebase(rebase_path) != 0)
         return -1;
 
-    // Resolve dynamic symbol imports (indirect symbols and pointer stubs)
+    // Resolve dynamic symbol imports. Unknown iOS APIs are fatal to readiness:
+    // a zero-returning fallback thunk would hide a broken compatibility layer.
+    unsigned unresolved_imports = 0;
     if (dysym) {
         uint32_t *indirect = (uint32_t *)(d + dysym->indirectsymoff);
         for (int s_idx = 0; s_idx < nsects_total; s_idx++) {
             section *s = sects[s_idx];
             if ((s->flags & 0xffu) == S_NON_LAZY_SYMBOL_POINTERS || (s->flags & 0xffu) == S_LAZY_SYMBOL_POINTERS) {
                 uint32_t nslots = s->size / 4;
-                uint32_t *slots = (uint32_t *)(macho_slide + s->addr);
+                if ((s->size & 3u) || (uint64_t)s->reserved1 + nslots > dysym->nindirectsyms ||
+                    s->addr < data_vm ||
+                    (uint64_t)s->addr + s->size > (uint64_t)data_vm + data_size) {
+                    l_error("Invalid indirect symbol section layout");
+                    return -1;
+                }
+                uint32_t *slots = (uint32_t *)(uintptr_t)(macho_slide + s->addr);
                 for (uint32_t i = 0; i < nslots; i++) {
                     uint32_t sym_idx = indirect[s->reserved1 + i];
                     if (sym_idx & INDIRECT_SYMBOL_LOCAL) {
@@ -458,7 +474,14 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                         if (!rebase_path)
                             slots[i] += macho_slide;
                     } else if (!(sym_idx & INDIRECT_SYMBOL_ABS)) {
+                        if (!symtab || !strtab || sym_idx >= nsyms ||
+                            symtab[sym_idx].n_strx >= strtab_size) {
+                            l_error("Invalid Mach-O imported symbol index/string offset");
+                            return -1;
+                        }
                         const char *name = strtab + symtab[sym_idx].n_strx;
+                        if (!memchr(name, 0, strtab_size - symtab[sym_idx].n_strx))
+                            return -1;
                         const import_entry *imp = imports_lookup(name);
                         if (imp) {
                             if (imp->data) {
@@ -467,12 +490,21 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                                 slots[i] = make_thunk(imp->addr, ml_align_call);
                             }
                         } else {
-                            slots[i] = make_unimpl_thunk(name);
+                            if (unresolved_imports < 20u)
+                                l_warn("Unresolved required iOS import: %s", name);
+                            unresolved_imports++;
+                            slots[i] = 0;
                         }
                     }
                 }
             }
         }
+    }
+
+    if (unresolved_imports) {
+        l_error("Missing %u iOS import bindings; refusing guest execution",
+                unresolved_imports);
+        return -1;
     }
 
     // Copy final __TEXT to executable memory block
