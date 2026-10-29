@@ -379,6 +379,9 @@ const import_entry darwin_imports[] = {
     // memory / strings
     D(malloc), D(calloc), D(realloc), D(free), D(memcpy), D(memmove), D(memset), D(memcmp),
     D(memchr), D(bzero), D(strlen), D(strcmp), D(strcpy), D(strncpy), D(strstr), D(strtok),
+    // Plain C string functions with integer/pointer ABI and no Darwin-specific layout.
+    D(strchr), D(strrchr), D(strcat), D(strncat), D(strncmp), D(strcspn),
+    D(strpbrk), D(strtol), D(strtoul), D(strtod), D(strerror), D(strdup),
     D(atoi), D(rand), D(srand), F(sprintf, d_sprintf), F(vsprintf, d_vsprintf),
     F(vsnprintf, d_vsnprintf), D(sscanf), D(puts),
     F(qsort, d_qsort), F(_ZdlPv, free),
