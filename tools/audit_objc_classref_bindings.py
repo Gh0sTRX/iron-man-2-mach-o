@@ -54,6 +54,27 @@ def inspect(data):
     if (symoff+nsyms*12>len(data) or stroff+strsize>len(data)
             or indirectoff+nindirect*4>len(data)):
         raise ValueError("Symbol table bounds")
+    # Objective-C classrefs in this original iOS build are S_REGULAR,
+    # NOT S_NON_LAZY_SYMBOL_POINTERS. Their unresolved slots are instead
+    # recorded in LC_DYSYMTAB external relocation entries (extreloff).
+    extrel_off,extrel_count=dysym[14:16]
+    if extrel_off+extrel_count*8>len(data):
+        raise ValueError("External relocation table out of bounds")
+    extrel={}
+    for i in range(extrel_count):
+        p=extrel_off+i*8
+        reloc_addr=u32(data,p)
+        info=u32(data,p+4)
+        if reloc_addr&0x80000000:
+            raise ValueError("Scattered external relocation unsupported")
+        if info&0x08000000: # r_extern
+            symbol_idx=info&0x00ffffff
+            if symbol_idx>=nsyms:raise ValueError("External relocation symbol out of range")
+            start=u32(data,symoff+symbol_idx*12)
+            if start>=strsize:raise ValueError("Relocation string index out of range")
+            end=data.find(b"\\0",stroff+start,stroff+strsize)
+            if end<0:raise ValueError("Unterminated relocation symbol")
+            extrel[reloc_addr]=data[stroff+start:end].decode("utf8","replace")
     results=[]
     for name,addr,length,fileoff,flags,reserved1 in sections:
         if name not in ("__objc_classrefs","__objc_superrefs"):
@@ -81,7 +102,13 @@ def inspect(data):
                     entry["kind"]="external"
                     entry["symbol"]=data[stroff+start:end].decode("utf8","replace")
             else:
-                entry["kind"]="not_indirect_section"
+                if va in extrel:
+                    entry["kind"]="external_relocation"
+                    entry["symbol"]=extrel[va]
+                elif raw:
+                    entry["kind"]="local_initialized"
+                else:
+                    entry["kind"]="unresolved_unclassified"
             results.append(entry)
     kinds={}
     for row in results:
