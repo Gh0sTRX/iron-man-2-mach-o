@@ -6,7 +6,7 @@ include("$ENV{VITASDK}/share/vita.toolchain.cmake" REQUIRED)
 project(im2_ios_loader_objects C ASM)
 
 # Compile-only readiness target. NO eboot.bin, SELF or VPK is produced.
-# The vendored loader is incomplete: main.c and darwin_printf.c are not in-tree.
+# Includes all vendored translation units; still no linking or VPK packaging.
 set(_sdk "$ENV{VITASDK}/arm-vita-eabi")
 foreach(_header "kubridge.h" "vitaGL.h")
   if(NOT EXISTS "${_sdk}/include/${_header}")
@@ -20,6 +20,8 @@ foreach(_lib "kubridge_stub" "vitaGL" "vitashark" "SceShaccCgExt")
 endforeach()
 
 add_library(im2_ios_loader_objects OBJECT
+  source/main.c
+  source/darwin_printf.c
   source/macho.c
   source/imports.c
   source/darwin.c
@@ -40,4 +42,4 @@ target_include_directories(im2_ios_loader_objects PRIVATE
 target_compile_options(im2_ios_loader_objects PRIVATE
   -O2 -g -ffixed-r9 -mfloat-abi=softfp
 )
-message(STATUS "Compiling vendored loader objects ONLY; missing imports and RX permission remain blockers.")
+message(STATUS "Compile-only target; runtime imports and RX permissions still need verification.")
