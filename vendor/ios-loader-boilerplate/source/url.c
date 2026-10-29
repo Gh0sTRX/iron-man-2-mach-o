@@ -91,7 +91,7 @@ static int url_assign(Im2URL *u,const char *text) {
     return 0;
 }
 static int url_assign_file(Im2URL *u,const char *path) {
-    if(!path || path[0]!='/' || !path[1])return -1;
+    if(!path || path[0]!='/')return -1;
     size_t n=strlen(path);
     if(n>URL_LIMIT/3u)return -1;
     char *encoded=malloc(8u+n*3u);
