@@ -134,7 +134,7 @@ static uintptr_t dict_get(Dictionary *d,const char *sel,void *key){(void)sel;siz
 static void dict_put(Dictionary *d,const char *sel,void *value,void *key){(void)sel;if(dict_set(d,value,key))fail("NSMutableDictionary key/value or allocation rejected");}
 static void dict_remove(Dictionary *d,const char *sel,void *key){
     (void)sel;size_t i;int found=find(d,key,&i);if(found<0)fail("NSMutableDictionary key rejected");if(!found)return;
-    Pair old=d->pairs[i];memmove(d->pairs+i,d->pairs+i+1,(d->count-i-1)*sizeof(*d->pairs));d->count--;d->mutation++;im2_objc_release(old.key);im2_objc_release(old.value);
+    Pair old=d->pairs[i];memmove(d->pairs+i,d->pairs+i+1,(d->count-i-1)*sizeof(*d->pairs));d->count--;d->pairs[d->count]=(Pair){0};d->mutation++;im2_objc_release(old.key);im2_objc_release(old.value);
 }
 static void dict_remove_all(Dictionary *d,const char *sel){(void)sel;dict_clear(d);}
 static uintptr_t dict_clone(Dictionary *d,int mutable){
