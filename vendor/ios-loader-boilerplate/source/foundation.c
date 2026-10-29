@@ -114,6 +114,18 @@ static const char *mapped_path(const char *path,char buffer[PATH_LIMIT+1]) {
     const char *mapped=config.map_path?config.map_path(path,buffer,PATH_LIMIT+1):path;
     return mapped && strlen(mapped)<PATH_LIMIT?mapped:NULL;
 }
+/* Shared stat-based existence check used by NSFileManager.
+ * Reject embedded-NUL NSStrings before filesystem path translation.
+ */
+int im2_foundation_path_exists(const void *path_string) {
+    const char *path=im2_string_utf8(path_string);
+    if(!path || strlen(path)!=im2_string_byte_length(path_string))return 0;
+    char mapped[PATH_LIMIT+1];
+    const char *p=mapped_path(path,mapped);
+    if(!p)return 0;
+    struct stat st;
+    return stat(p,&st)==0;
+}
 void *im2_data_from_file(const char *path,int autorelease) {
     char mapped[PATH_LIMIT+1];const char *p=mapped_path(path,mapped);if(!p)return NULL;
     struct stat st;if(stat(p,&st) || !S_ISREG(st.st_mode))return NULL;
