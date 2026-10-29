@@ -28,3 +28,9 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
 build/host-runtime/test_objc_guest
 
 python3 tests/test_scanner.py
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_foundation.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_foundation
+build/host-runtime/test_foundation

@@ -243,3 +243,10 @@ void *im2_objc_autorelease(void *object) {
     Autorelease *a=malloc(sizeof(*a));if(!a) return NULL;
     *a=(Autorelease){object,p->queued};p->queued=a;return object;
 }
+
+Im2ObjcClass *im2_objc_object_class(const void *receiver) {
+    const Im2ObjcClass *cls=im2_objc_class_metadata(receiver);if(cls)return cls->isa;
+    pthread_mutex_lock(&lock);Object *o=object_record(receiver);
+    Im2ObjcClass *isa=o?((const Im2ObjcObject *)receiver)->isa:NULL;
+    pthread_mutex_unlock(&lock);return isa;
+}

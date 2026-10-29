@@ -45,3 +45,5 @@ python3 tests/test_arm_dispatch.py --binary build/arm-dispatch/glue.bin --symbol
 Details and limits: [guest class progress](docs/GUEST_CLASS_PROGRESS_2026-10-29_TR.md).
 
 Full Turkish progress report: [30 October 2026](docs/DURUM_2026-10-30_TR.md).
+
+Latest Foundation work: [UTF-8 strings, NSData and bundle resources](docs/FOUNDATION_PROGRESS_2026-10-30_TR.md).

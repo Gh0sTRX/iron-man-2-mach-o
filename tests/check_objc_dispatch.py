@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
-"""Structural safety checks for Objective-C ARMv6 dispatcher.
-
-This is a source regression check, NOT proof of ObjC ABI compatibility.
-"""
+"""Structural guards complement behavioral Foundation/core and machine-code ABI tests."""
 from pathlib import Path
 import sys
-
-src=(Path(__file__).resolve().parents[1]/
-     "vendor/ios-loader-boilerplate/source/objc.c").read_text()
+root=Path(__file__).resolve().parents[1]
+s=(root/'vendor/ios-loader-boilerplate/source/objc.c').read_text()
 checks={
-    "zero-argument selector does not consume va_arg":'if (takes_arg)\n        a = va_arg(ap, uint32_t);' in src,
-    "nil selector handled":'if (!sel) {\n        va_end(ap);' in src,
-    "C string output checks buffer and capacity":'if (a && max)' in src,
-    "selector matcher handles null":'return sel && name && !strcmp(sel, name);' in src,
-    "struct-return destination checked":'if (!ret)\n        return;' in src,
-    "unknown selectors logged":'log_unknown(self, sel);' in src,
+    'assembly dispatch retains explicit ABI kind':'F_ABI(objc_msgSend, im2_objc_msgSend_entry)' in s,
+    'unknown receiver/selector/ABI is rejected':'fatal_error("Unsupported ObjC receiver/selector/return ABI:' in s,
+    'guest aggregate return ABI remains gated':'target.stret_size==SIZE_MAX' in s,
+    'Foundation uses actual class module':'im2_foundation_init(root,&foundation)' in s,
+    'no universal dummy object':'dummy_obj' not in s and 'ret_obj' not in s,
+    'no foreign game version fabricated':'1.1.41' not in s,
+    'class import entries are data':'class_imports[i]=(import_entry)' in s and 'IM2_IMPORT_DATA' in s,
 }
-for label,ok in checks.items():
-    print(("PASS" if ok else "FAIL"),label)
+for name,ok in checks.items():print(('PASS' if ok else 'FAIL'),name)
 sys.exit(0 if all(checks.values()) else 1)

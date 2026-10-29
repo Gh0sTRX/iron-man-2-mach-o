@@ -1,17 +1,5 @@
-/**
- * @file objc.c
- * @brief Lightweight Objective-C and Foundation/UIKit runtime emulation.
- * @details Implements selector-name dispatching (selrefs point to strings in __objc_methname)
- *          to satisfy Foundation/UIKit calls required by iOS game engines:
- *          - Typography: NSString + UIFont (sizeWithFont:, drawAtPoint:withFont:) rendered
- *            onto a 512x32 grayscale CGBitmapContext glyph atlas via FreeType.
- *          - Bundle paths/dates: resourcePath, objectForInfoDictionaryKey:, NSCalendar.
- *          - Text input: EAGLView text input dialogs routed through sceImeDialog.
- *          All other selectors log a warning and return nil/0.
- *
- *          Custom NSString structures mirror __cfstring layout {isa, flags, cstr, len},
- *          ensuring @"..." binary constants and dynamic strings share identical field offsets (cstr at +8).
- */
+/** Partial Foundation/CoreGraphics/IME bridge. Native methods are registered by class;
+ * unsupported selectors fail explicitly. Foundation objects live in foundation.c. */
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <psp2/common_dialog.h>
@@ -29,29 +17,34 @@
 #include "macho.h"
 #include "objc_runtime.h"
 #include "objc.h"
+#include "foundation.h"
+#include "darwin.h"
 
 // ---------------------------------------------------------------- NSString
 
-typedef struct {
-    void *isa;
-    uint32_t flags;
-    char *str;
-    uint32_t len;
-} ns_string;
-
-static Im2ObjcClass *string_class, *pool_class;
-static void ns_destroy(void *pointer) { free(((ns_string *)pointer)->str); }
-static ns_string *ns_new(const char *s) {
-    ns_string *o=im2_objc_alloc(string_class,ns_destroy);
-    if(!o) fatal_error("NSString allocation failed");
-    o->str=strdup(s?s:"");
-    if(!o->str) fatal_error("NSString buffer allocation failed");
-    o->len=(uint32_t)strlen(o->str); o->flags=0x7c8;
-    if(!im2_objc_autorelease(o)) fatal_error("NSString autorelease without active thread pool");
-    return o;
+typedef Im2String ns_string;
+static Im2ObjcClass *string_class,*pool_class;
+static import_entry class_imports[10];
+static void bind_class_imports(void) {
+    static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
+        "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
+        "_OBJC_CLASS_$_NSAutoreleasePool","_OBJC_METACLASS_$_NSAutoreleasePool",
+        "_OBJC_CLASS_$_NSData","_OBJC_METACLASS_$_NSData",
+        "_OBJC_CLASS_$_NSBundle","_OBJC_METACLASS_$_NSBundle"};
+    for(size_t i=0;i<10;i++) {
+        const char *name=names[i];
+        Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
+        const Im2ObjcClass *m=im2_objc_class_metadata(c);
+        if(!m)fatal_error("Missing native class import: %s",name);
+        class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
+    }
 }
-
-static const char *ns_cstr(const void *o) { return o && ((const ns_string *)o)->str ? ((const ns_string *)o)->str : ""; }
+static ns_string *ns_new(const char *text) {
+    ns_string *s=im2_string_create(text,1);
+    if(!s)fatal_error("NSString UTF-8 creation or autorelease failed");
+    return s;
+}
+static const char *ns_cstr(const void *o) {return im2_string_utf8(o);}
 
 static uint32_t utf8_next(const unsigned char **p) {
     const unsigned char *s = *p;
@@ -297,115 +290,13 @@ void ime_poll(void) {
 
 // ---------------------------------------------------------------- objc_msgSend
 
-static uint32_t dummy_obj[4];
-static uint32_t ret_obj(void) { return (uint32_t)dummy_obj; }
-
-static void log_unknown(void *self, const char *sel) {
-    static const char *seen[512];
-    static int nseen;
-    for (int i = 0; i < nseen; i++)
-        if (seen[i] == sel)
-            return;
-    if (nseen < 512)
-        seen[nseen++] = sel;
-    l_error("objc_msgSend(%p, %s) -> nil", self, sel);
+static uintptr_t string_format(void *self,const char *selector,void *format,...) {
+    (void)self;(void)selector;
+    const char *text=ns_cstr(format);if(!text)fatal_error("Unsupported NSString format object");
+    va_list ap;va_start(ap,format);ns_string *result=ns_format(text,ap);va_end(ap);
+    return (uintptr_t)result;
 }
-
-static int sel_is(const char *sel, const char *name) { return sel && name && !strcmp(sel, name); }
-
-static uint32_t string_message(void *self, const char *sel, ...) {
-    va_list ap;
-    va_start(ap, sel);
-    // Do not read a variadic argument for zero-argument selectors.
-    // Doing so is undefined behavior and can corrupt the ARMv6 guest call frame.
-    uint32_t a = 0;
-    if (!sel) {
-        va_end(ap);
-        return 0;
-    }
-    const int takes_arg =
-        strchr(sel, ':') != NULL;
-    if (takes_arg)
-        a = va_arg(ap, uint32_t);
-    uint32_t r = 0;
-    const struct tm *now;
-    time_t t;
-    if (sel_is(sel, "stringWithUTF8String:") || sel_is(sel, "stringWithCString:encoding:")) {
-        r = (uint32_t)ns_new((const char *)a);
-    } else if (sel_is(sel, "stringWithFormat:")) {
-        r = (uint32_t)ns_format(ns_cstr((void *)a), ap);
-    } else if (sel_is(sel, "length")) {
-        r = utf16_len(ns_cstr(self));
-    } else if (sel_is(sel, "UTF8String") || sel_is(sel, "cStringUsingEncoding:")) {
-        r = (uint32_t)ns_cstr(self);
-    } else if (sel_is(sel, "getCString:maxLength:encoding:")) {
-        uint32_t max = va_arg(ap, uint32_t);
-        if (a && max) {
-            snprintf((char *)(uintptr_t)a, max, "%s", ns_cstr(self));
-            r = 1;
-        } else {
-            r = 0;
-        }
-    } else if (sel_is(sel, "systemFontOfSize:")) {
-        union { uint32_t u; float f; } v = {a};
-        r = (uint32_t)font_of_size(v.f);
-    } else if (sel_is(sel, "mainBundle") || sel_is(sel, "currentCalendar") || sel_is(sel, "date") ||
-               sel_is(sel, "components:fromDate:")) {
-        r = ret_obj();
-    } else if (sel_is(sel, "resourcePath")) {
-        char p[256];
-        snprintf(p, sizeof(p), "%s", BUNDLE_PATH);
-        p[strlen(p) - 1] = 0; // strip trailing slash, matching NSBundle resourcePath
-        r = (uint32_t)ns_new(p);
-    } else if (sel_is(sel, "objectForInfoDictionaryKey:")) {
-        const char *k = ns_cstr((void *)a);
-        r = !strcmp(k, "CFBundleVersion") || !strcmp(k, "CFBundleShortVersionString") ? (uint32_t)ns_new("1.1.41") : 0;
-    } else if (sel_is(sel, "year") || sel_is(sel, "month") || sel_is(sel, "day")) {
-        t = time(NULL);
-        now = localtime(&t);
-        r = sel[0] == 'y' ? now->tm_year + 1900 : sel[0] == 'm' ? now->tm_mon + 1 : now->tm_mday;
-    } else if (sel_is(sel, "textInputOpen:")) {
-        ime_open(a);
-    } else if (sel_is(sel, "textInputGetUTF8")) {
-        r = (uint32_t)ime_utf8;
-    } else if (sel_is(sel, "textInputGetLength")) {
-        r = utf16_len(ime_utf8);
-    } else {
-        log_unknown(self, sel);
-    }
-    va_end(ap);
-    return r;
-}
-
-// Methods returning composite structs (CGSize/CGPoint): first argument is return pointer.
-static void string_message_stret(float *ret, void *self, const char *sel, ...) {
-    if (!ret)
-        return;
-    if (!sel) {
-        ret[0] = ret[1] = 0;
-        return;
-    }
-    va_list ap;
-    va_start(ap, sel);
-    if (sel_is(sel, "sizeWithFont:")) {
-        ui_font *f = va_arg(ap, ui_font *);
-        int size = f ? f->size : 14;
-        ret[0] = text_width(size, ns_cstr(self));
-        ret[1] = line_height(size);
-    } else if (sel_is(sel, "drawAtPoint:withFont:")) {
-        union { uint32_t u; float f; } x = {va_arg(ap, uint32_t)}, y = {va_arg(ap, uint32_t)};
-        ui_font *f = va_arg(ap, ui_font *);
-        int size = f ? f->size : 14;
-        if (cur_ctx)
-            draw_text(cur_ctx, ns_cstr(self), (int)x.f, (int)y.f, size);
-        ret[0] = text_width(size, ns_cstr(self));
-        ret[1] = line_height(size);
-    } else {
-        log_unknown(self, sel);
-        ret[0] = ret[1] = 0;
-    }
-    va_end(ap);
-}
+static void foundation_failure(const char *message){fatal_error("Foundation: %s",message);}
 
 // Class-specific dispatch for explicit native classes and validated guest metadata.
 // UIKit behavior and aggregate guest-return ABIs remain incomplete.
@@ -424,9 +315,6 @@ static void object_dealloc(void *self,const char *sel) {
     (void)sel;
     /* The outer release owns storage disposal after the dealloc chain returns. */
     if(im2_objc_retain_count(self)!=0) fatal_error("Direct dealloc outside final release is unsupported");
-}
-static void string_dealloc(void *self,const char *sel) {
-    object_dealloc(self,sel);ns_destroy(self);((ns_string *)self)->str=NULL;
 }
 static void *object_init(void *self,const char *sel) { (void)sel; return self; }
 static void *object_retain(void *self,const char *sel) { (void)sel; return im2_objc_retain(self); }
@@ -481,28 +369,18 @@ void objc_init(void) {
     const Im2MethodSpec root_class[]={METHOD("alloc","@@:",object_alloc),METHOD("class","#@:",class_class)};
     Im2ObjcClass *root=im2_objc_register_class("NSObject",NULL,sizeof(Im2ObjcObject),
         root_instance,7,root_class,2);
-    const Im2MethodSpec strings[]={METHOD("UTF8String","*@:",string_message),
-        METHOD("length","I@:",string_message),METHOD("getCString:maxLength:encoding:","c@:*II",string_message),
-        METHOD("dealloc","v@:",string_dealloc)};
-    const Im2MethodSpec string_factory[]={METHOD("stringWithUTF8String:","@@:*",string_message),
-        METHOD("stringWithFormat:","@@:@",string_message)};
-    string_class=im2_objc_register_class("NSString",root,sizeof(ns_string),strings,4,string_factory,2);
+    const Im2FoundationConfig foundation={BUNDLE_PATH,(Im2Imp)string_format,foundation_failure,darwin_path};
+    if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
+    string_class=im2_objc_class_named("NSString");
     const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
     pool_class=im2_objc_register_class("NSAutoreleasePool",root,sizeof(Im2ObjcObject),pool_methods,2,NULL,0);
     if(!root || !string_class || !pool_class) fatal_error("ObjC class registry initialization failed");
+    bind_class_imports();
 }
 const import_entry *objc_class_import(const char *name) {
-    static import_entry entries[6];
-    static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
-        "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
-        "_OBJC_CLASS_$_NSAutoreleasePool","_OBJC_METACLASS_$_NSAutoreleasePool"};
-    if(!string_class || !name) return NULL;
-    Im2ObjcClass *objects[]={im2_objc_class_named("NSObject"),string_class,pool_class};
-    for(size_t i=0;i<6;i++) if(!strcmp(name,names[i])) {
-        entries[i]=(import_entry){names[i],(uintptr_t)(i&1?objects[i/2]->isa:objects[i/2]),1};
-        return &entries[i];
-    }
-    return NULL; /* Never fabricate the other 62 required framework classes. */
+    if(!name)return NULL;
+    for(size_t i=0;i<10;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    return NULL;
 }
 
 // ---------------------------------------------------------------- table

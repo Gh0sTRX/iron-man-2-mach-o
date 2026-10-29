@@ -74,7 +74,7 @@
     {
       "name": "NSData",
       "source_classref_slots": 6,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
@@ -116,7 +116,7 @@
     {
       "name": "NSBundle",
       "source_classref_slots": 4,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },

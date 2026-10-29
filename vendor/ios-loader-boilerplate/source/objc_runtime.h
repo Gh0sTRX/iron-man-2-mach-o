@@ -55,3 +55,5 @@ Im2ObjcClass *im2_objc_register_foreign_class(const char *name,void *identity,vo
 /* Startup-only rollback; rejects rollback if objects of removed classes already exist. */
 size_t im2_objc_registration_checkpoint(void);
 int im2_objc_registration_rollback(size_t checkpoint);
+/* Returns the known ISA identity without dereferencing an unregistered receiver. */
+Im2ObjcClass *im2_objc_object_class(const void *receiver);
