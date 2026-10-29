@@ -70,6 +70,7 @@ static uint8_t *file_data;
 static uint32_t file_slice_offset = 0;
 static nlist *symtab;
 static uint32_t nsyms;
+static uint32_t strtab_size;
 static const char *strtab;
 static uint32_t text_vm, text_size, data_vm, data_size;
 static uint8_t *text_buf;
@@ -136,6 +137,9 @@ uintptr_t macho_sym(const char *name) {
         return 0;
     for (uint32_t i = 0; i < nsyms; i++) {
         nlist *s = &symtab[i];
+        if (s->n_strx >= strtab_size ||
+            !memchr(strtab + s->n_strx, 0, strtab_size - s->n_strx))
+            continue;
         if (s->n_type & N_STAB)
             continue;
         if ((s->n_type & N_TYPE) != N_SECT)
@@ -234,22 +238,38 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     FILE *f = fopen(bin_path, "rb");
     if (!f)
         fatal_error("Failed to open %s", bin_path);
-    fseek(f, 0, SEEK_END);
-    size_t file_len = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return -1;
+    }
+    long len = ftell(f);
+    if (len < 28 || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return -1;
+    }
+    size_t file_len = (size_t)len;
 
     uint8_t *raw = malloc(file_len);
     if (!raw)
         fatal_error("Insufficient memory to load %s", bin_path);
-    fread(raw, 1, file_len, f);
+    if (fread(raw, 1, file_len, f) != file_len) {
+        fclose(f);
+        free(raw);
+        return -1;
+    }
     fclose(f);
 
     uint8_t *d = raw;
+    size_t slice_len = file_len;
     file_slice_offset = 0;
 
     // Detect FAT universal Mach-O (big-endian 0xCAFEBABE)
     if (file_len >= 8 && (memcmp(raw, "\xca\xfe\xba\xbe", 4) == 0 || memcmp(raw, "\xbe\xba\xfe\xca", 4) == 0)) {
         uint32_t nfat = (raw[4] << 24) | (raw[5] << 16) | (raw[6] << 8) | raw[7];
+        if (nfat > (file_len - 8u) / 20u) {
+            free(raw);
+            return -1;
+        }
         uint32_t chosen_offset = 0, chosen_size = 0;
         const char *arch_name = "arm";
         for (uint32_t i = 0; i < nfat; i++) {
@@ -271,20 +291,31 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                 }
             }
         }
-        if (chosen_offset && chosen_offset + chosen_size <= file_len) {
+        if (chosen_offset && (uint64_t)chosen_offset + chosen_size <= file_len) {
             l_info("FAT binary detected: selected slice %s (offset 0x%X, size %u KB)",
                    arch_name, (unsigned)chosen_offset, (unsigned)(chosen_size / 1024));
             d = raw + chosen_offset;
+            slice_len = chosen_size;
             file_slice_offset = chosen_offset;
         }
     }
 
+    if (slice_len < 28u) {
+        free(raw);
+        return -1;
+    }
     file_data = d;
     uint32_t magic = *(uint32_t *)d;
     if (magic != 0xFEEDFACE)
         fatal_error("Invalid Mach-O magic header (0x%08X != 0xFEEDFACE)", (unsigned)magic);
 
     uint32_t ncmds = *(uint32_t *)(d + 16);
+    uint32_t sizeofcmds = *(uint32_t *)(d + 20);
+    if (ncmds > sizeofcmds / 8u || (uint64_t)28u + sizeofcmds > slice_len) {
+        l_error("Invalid Mach-O load command envelope");
+        free(raw);
+        return -1;
+    }
     uint32_t off = 28;
 
     dysymtab_command *dysym = NULL;
@@ -293,24 +324,44 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     int nsects_total = 0;
 
     for (uint32_t c = 0; c < ncmds; c++) {
+        if ((uint64_t)off + 8u > (uint64_t)28u + sizeofcmds) {
+            l_error("Mach-O load command header truncated");
+            return -1;
+        }
         uint32_t cmd = *(uint32_t *)(d + off);
         uint32_t size = *(uint32_t *)(d + off + 4);
+        if (size < 8u || (uint64_t)off + size > (uint64_t)28u + sizeofcmds) {
+            l_error("Mach-O load command extends beyond command region");
+            return -1;
+        }
         if (cmd == LC_SEGMENT) {
+            if (size < 56u) return -1;
             segment_command *s = (segment_command *)(d + off);
             if (!strcmp(s->segname, "__TEXT"))
                 seg_text = s;
             else if (!strcmp(s->segname, "__DATA"))
                 seg_data = s;
+            if (s->nsects > (size - 56u) / sizeof(section))
+                return -1;
             section *sec = (section *)(d + off + 56);
             for (uint32_t i = 0; i < s->nsects && nsects_total < 64; i++)
                 sects[nsects_total++] = &sec[i];
         } else if (cmd == LC_SYMTAB) {
+            if (size < 24u) return -1;
             uint32_t *p = (uint32_t *)(d + off + 8);
+            if ((uint64_t)p[0] + (uint64_t)p[1] * sizeof(nlist) > slice_len ||
+                (uint64_t)p[2] + p[3] > slice_len)
+                return -1;
             symtab = (nlist *)(d + p[0]);
             nsyms = p[1];
             strtab = (const char *)(d + p[2]);
+            strtab_size = p[3];
         } else if (cmd == LC_DYSYMTAB) {
+            if (size < 80u) return -1;
             dysym = (dysymtab_command *)(d + off + 8);
+            if ((uint64_t)dysym->indirectsymoff +
+                    (uint64_t)dysym->nindirectsyms * 4u > slice_len)
+                return -1;
         } else if (cmd == LC_ENCRYPTION_INFO) {
             uint32_t cryptid = *(uint32_t *)(d + off + 16);
             if (cryptid != 0) {
@@ -325,6 +376,11 @@ int macho_load(const char *bin_path, const char *rebase_path) {
 
     if (!seg_text || !seg_data)
         fatal_error("Mach-O does not contain __TEXT or __DATA segments");
+    if ((uint64_t)seg_text->fileoff + seg_text->filesize > slice_len ||
+        (uint64_t)seg_data->fileoff + seg_data->filesize > slice_len ||
+        seg_text->filesize > seg_text->vmsize ||
+        seg_data->filesize > seg_data->vmsize)
+        return -1;
 
     text_vm = seg_text->vmaddr;
     text_size = ALIGN(seg_text->vmsize, 0x1000);
