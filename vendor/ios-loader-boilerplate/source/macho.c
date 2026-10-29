@@ -185,7 +185,12 @@ static void apply_rebase(const char *rebase_path) {
         fclose(f);
         return;
     }
-    fread(entries, sizeof(uint32_t), count, f);
+    if (count > 1000000u || fread(entries, sizeof(uint32_t), count, f) != count) {
+        l_error("Truncated or excessive RBS1 entries");
+        free(entries);
+        fclose(f);
+        return;
+    }
     fclose(f);
 
     l_info("Applying %u rebase words from %s...", (unsigned)count, rebase_path);
@@ -354,6 +359,10 @@ int macho_load(const char *bin_path, const char *rebase_path) {
         }
     }
 
+    // Rebase original local pointers BEFORE overwriting imported symbol slots.
+    if (rebase_path)
+        apply_rebase(rebase_path);
+
     // Resolve dynamic symbol imports (indirect symbols and pointer stubs)
     if (dysym) {
         uint32_t *indirect = (uint32_t *)(d + dysym->indirectsymoff);
@@ -365,7 +374,10 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                 for (uint32_t i = 0; i < nslots; i++) {
                     uint32_t sym_idx = indirect[s->reserved1 + i];
                     if (sym_idx & INDIRECT_SYMBOL_LOCAL) {
-                        slots[i] += MACHO_SLIDE;
+                        // Offline RBS1 already relocates local pointer slots.
+                        // Avoid applying the slide a second time.
+                        if (!rebase_path)
+                            slots[i] += MACHO_SLIDE;
                     } else if (!(sym_idx & INDIRECT_SYMBOL_ABS)) {
                         const char *name = strtab + symtab[sym_idx].n_strx;
                         const import_entry *imp = imports_lookup(name);
@@ -383,10 +395,6 @@ int macho_load(const char *bin_path, const char *rebase_path) {
             }
         }
     }
-
-    // Apply offline rebase relocations
-    if (rebase_path)
-        apply_rebase(rebase_path);
 
     // Copy final __TEXT to executable memory block
     kuKernelCpuUnrestrictedMemcpy((void *)(MACHO_SLIDE + text_vm), text_buf, text_size);
