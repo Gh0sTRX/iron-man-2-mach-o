@@ -1,5 +1,5 @@
 {
-  "note": "Original class counts from owner Mach-O audit. Partial native implementations include URL/request state and NSFileManager's read-only fileExistsAtPath. No native Vita game boot, networking, UIKit or full Apple framework behavioral compatibility has been demonstrated.",
+  "note": "This inventory counts original owner Mach-O __objc_classrefs only. UINavigationController, UIControl and UIResponder are needed as superclasses but are not in the 64 classref list; they are registered by the UIKit module. Measured UIKit superclass sizes unblock metadata staging but UIKit class/ivar ABI, rendering, touches, app lifecycle and guest game boot remain unverified.",
   "classes": [
     {
       "name": "NSString",
@@ -67,7 +67,7 @@
     {
       "name": "UIView",
       "source_classref_slots": 7,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
@@ -102,14 +102,14 @@
     {
       "name": "UIButton",
       "source_classref_slots": 5,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
     {
       "name": "UIImageView",
       "source_classref_slots": 5,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
@@ -235,7 +235,7 @@
     {
       "name": "UIViewController",
       "source_classref_slots": 2,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
@@ -449,7 +449,7 @@
     {
       "name": "UIWindow",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     }
