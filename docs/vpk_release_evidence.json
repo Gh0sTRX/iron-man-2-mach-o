@@ -1,0 +1,10 @@
+{
+  "loader_objects_compiled": {"passed": false, "evidence": ""},
+  "loader_elf_linked": {"passed": false, "evidence": ""},
+  "all_original_imports_bound": {"passed": false, "evidence": ""},
+  "objc_runtime_validated": {"passed": false, "evidence": ""},
+  "rbs1_on_device_verified": {"passed": false, "evidence": ""},
+  "guest_rx_cache_verified": {"passed": false, "evidence": ""},
+  "graphics_input_audio_verified": {"passed": false, "evidence": ""},
+  "legal_assets_provenance_verified": {"passed": false, "evidence": ""}
+}
