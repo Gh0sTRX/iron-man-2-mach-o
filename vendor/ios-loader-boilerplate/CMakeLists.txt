@@ -1,21 +1,22 @@
 cmake_minimum_required(VERSION 3.21)
-if(NOT DEFINED ENV{VITASDK})
-  message(FATAL_ERROR "Use pinned VitaSDK 2026.08 (VITASDK environment variable)")
-endif()
-include("$ENV{VITASDK}/share/vita.toolchain.cmake" REQUIRED)
-project(im2_ios_loader_objects C ASM)
+project(im2_ios_loader_objects LANGUAGES C ASM)
 
-# Compile-only readiness target. NO eboot.bin, SELF or VPK is produced.
-# Includes all vendored translation units; still no linking or VPK packaging.
+# Compile-only target: no ELF/SELF/VPK is produced.
+# Configure with: cmake -S vendor/ios-loader-boilerplate -B build/loader-objects
+#   -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+if(NOT DEFINED ENV{VITASDK})
+  message(FATAL_ERROR "VITASDK environment variable is required")
+endif()
+if(NOT CMAKE_C_COMPILER MATCHES "arm-vita-eabi")
+  message(FATAL_ERROR "VitaSDK cross-compiler required; configure with -DCMAKE_TOOLCHAIN_FILE")
+endif()
+
 set(_sdk "$ENV{VITASDK}/arm-vita-eabi")
+# This stage intentionally checks only compilation prerequisites.
+# Link-time dependencies are verified separately by tools/check_vita_dependencies.sh.
 foreach(_header "kubridge.h" "vitaGL.h")
   if(NOT EXISTS "${_sdk}/include/${_header}")
-    message(FATAL_ERROR "Missing VitaSDK header: ${_header}")
-  endif()
-endforeach()
-foreach(_lib "kubridge_stub" "vitaGL" "vitashark" "SceShaccCgExt")
-  if(NOT EXISTS "${_sdk}/lib/lib${_lib}.a")
-    message(FATAL_ERROR "Missing VitaSDK library: ${_lib} (install with vdpm)")
+    message(FATAL_ERROR "Missing required header: ${_header}")
   endif()
 endforeach()
 
@@ -39,7 +40,5 @@ target_include_directories(im2_ios_loader_objects PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/source"
   "${_sdk}/include/freetype2"
 )
-target_compile_options(im2_ios_loader_objects PRIVATE
-  -O2 -g -ffixed-r9 -mfloat-abi=softfp
-)
-message(STATUS "Compile-only target; runtime imports and RX permissions still need verification.")
+target_compile_options(im2_ios_loader_objects PRIVATE -O2 -g -ffixed-r9)
+message(STATUS "Loader object compilation only. Link, RX validation and VPK are separate gates.")
