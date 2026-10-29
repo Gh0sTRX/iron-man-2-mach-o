@@ -401,7 +401,18 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                     (uint64_t)dysym->nindirectsyms * 4u > slice_len)
                 return -1;
         } else if (cmd == LC_ENCRYPTION_INFO) {
+            // encryption_info_command is 20 bytes, including cmd/cmdsize.
+            if (size < 20u) {
+                l_error("Truncated Mach-O encryption command");
+                return -1;
+            }
+            uint32_t cryptoff = *(uint32_t *)(d + off + 8);
+            uint32_t cryptsize = *(uint32_t *)(d + off + 12);
             uint32_t cryptid = *(uint32_t *)(d + off + 16);
+            if ((uint64_t)cryptoff + cryptsize > slice_len) {
+                l_error("Mach-O encryption region outside file");
+                return -1;
+            }
             if (cryptid != 0) {
                 l_error("================================================================");
                 l_error("CRITICAL ALERT: Binary contains FairPlay DRM encryption (cryptid %u)!", (unsigned)cryptid);
@@ -507,10 +518,9 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                 for (uint32_t i = 0; i < nslots; i++) {
                     uint32_t sym_idx = indirect[s->reserved1 + i];
                     if (sym_idx & INDIRECT_SYMBOL_LOCAL) {
-                        // Offline RBS1 already relocates local pointer slots.
-                        // Avoid applying the slide a second time.
-                        if (!rebase_path)
-                            slots[i] += macho_slide;
+                        // The mandatory RBS1 table must have already relocated
+                        // every local slot. Never relocate it a second time.
+                        continue;
                     } else if (!(sym_idx & INDIRECT_SYMBOL_ABS)) {
                         if (!symtab || !strtab || sym_idx >= nsyms ||
                             symtab[sym_idx].n_strx >= strtab_size) {
