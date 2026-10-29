@@ -139,3 +139,8 @@ int im2_uikit_application_init(Im2ObjcClass *root,void (*on_failure)(const char 
     application->orientation=1; /* UIInterfaceOrientationPortrait. */
     return 0;
 }
+
+int im2_uikit_application_shutdown(void) {
+    if(!application || im2_objc_retain_count(application)!=1)return -1;
+    return im2_objc_release(application);
+}
