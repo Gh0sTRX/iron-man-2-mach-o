@@ -43,5 +43,14 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/foundation.c \
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/darwin_printf.c \
+  vendor/ios-loader-boilerplate/source/collections.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_cfstrings
 build/host-runtime/test_cfstrings
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_collections.c \
+  vendor/ios-loader-boilerplate/source/collections.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_collections
+build/host-runtime/test_collections

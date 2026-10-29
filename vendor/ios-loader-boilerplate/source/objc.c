@@ -18,27 +18,32 @@
 #include "objc_runtime.h"
 #include "objc.h"
 #include "foundation.h"
+#include "collections.h"
 #include "darwin.h"
 
 // ---------------------------------------------------------------- NSString
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[11];
+static import_entry class_imports[19];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
         "_OBJC_CLASS_$_NSAutoreleasePool","_OBJC_METACLASS_$_NSAutoreleasePool",
         "_OBJC_CLASS_$_NSData","_OBJC_METACLASS_$_NSData",
-        "_OBJC_CLASS_$_NSBundle","_OBJC_METACLASS_$_NSBundle"};
-    for(size_t i=0;i<10;i++) {
+        "_OBJC_CLASS_$_NSBundle","_OBJC_METACLASS_$_NSBundle",
+        "_OBJC_CLASS_$_NSArray","_OBJC_METACLASS_$_NSArray",
+        "_OBJC_CLASS_$_NSMutableArray","_OBJC_METACLASS_$_NSMutableArray",
+        "_OBJC_CLASS_$_NSDictionary","_OBJC_METACLASS_$_NSDictionary",
+        "_OBJC_CLASS_$_NSMutableDictionary","_OBJC_METACLASS_$_NSMutableDictionary"};
+    for(size_t i=0;i<18;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[10]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[18]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -373,6 +378,7 @@ void objc_init(void) {
         root_instance,7,root_class,2);
     const Im2FoundationConfig foundation={BUNDLE_PATH,(Im2Imp)string_format,foundation_failure,darwin_path};
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
+    if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
     string_class=im2_objc_class_named("NSString");
     darwin_set_object_string_resolver(im2_string_utf8);
     const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
@@ -382,7 +388,7 @@ void objc_init(void) {
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<11;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<19;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 
@@ -404,6 +410,10 @@ static void *ns_class_from_string(void *string) {
     return im2_objc_class_named(name);
 }
 
+static void enumeration_mutation(void *object) {
+    fatal_error("Collection mutated during Objective-C enumeration: %p",object);
+}
+
 // ---------------------------------------------------------------- table
 
 #undef F
@@ -411,7 +421,7 @@ static void *ns_class_from_string(void *string) {
 
 const import_entry objc_imports[] = {
     F(CFStringGetCString, cf_string_get_cstring),F(CFRelease, cf_release),F(CFRetain, cf_retain),
-    F(NSClassFromString, ns_class_from_string),
+    F(NSClassFromString, ns_class_from_string),F(objc_enumerationMutation, enumeration_mutation),
     F_ABI(objc_msgSend, im2_objc_msgSend_entry), F_ABI(objc_msgSend_stret, im2_objc_msgSend_stret_entry),
     F_ABI(objc_msgSendSuper2, im2_objc_msgSendSuper2_entry),
     F_ABI(objc_msgSendSuper2_stret, im2_objc_msgSendSuper2_stret_entry),

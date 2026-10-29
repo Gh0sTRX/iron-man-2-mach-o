@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT. Asset-free fixtures; optional private owner image argument. */
 #include "cfstring.h"
+#include "collections.h"
 #include "foundation.h"
 #include "darwin_printf.h"
 #include <assert.h>
@@ -87,6 +88,10 @@ static void owner(const char *path,Im2ObjcClass *strings){
     for(size_t i=0;i<count;i++)put(rows+16*i,(uint32_t)(uintptr_t)strings);
     unsigned char *snapshot=malloc(cfsize);assert(snapshot);memcpy(snapshot,rows,cfsize);
     char error[160];assert(!im2_foundation_register_cfstrings(cfaddr,count,read_image,&im,error,sizeof(error)));
+    void **identities=calloc(count,sizeof(*identities));assert(identities);
+    for(size_t i=0;i<count;i++)identities[i]=(void *)(uintptr_t)(cfaddr+i*16);
+    void *array=im2_array_create(identities,count,0,0);assert(array && send(array,"count")==count);
+    void *dict=im2_dictionary_create(identities,identities,count,0,0);assert(dict);
     size_t ascii=0,wide=0;
     for(size_t i=0;i<count;i++){
         const unsigned char *r=rows+16*i;uint32_t flags=u32(r+4),units=u32(r+12);void *id=(void *)(uintptr_t)(cfaddr+i*16);
@@ -102,6 +107,13 @@ static void owner(const char *path,Im2ObjcClass *strings){
         }
         assert(im2_objc_retain(id)==id && !im2_objc_release(id) && im2_objc_autorelease(id)==id && send(id,"copy")== (uintptr_t)id);
     }
+    for(size_t i=0;i<count;i++) {
+        const char *sel="objectForKey:";
+        void *value=(void *)((uintptr_t(*)(void *,const char *,void *))method(dict,sel))(dict,sel,identities[i]);
+        assert(value && im2_string_byte_length(value)==im2_string_byte_length(identities[i]));
+        assert(!memcmp(im2_string_utf8(value),im2_string_utf8(identities[i]),im2_string_byte_length(value)));
+    }
+    assert(!im2_objc_release(dict) && !im2_objc_release(array));free(identities);
     assert(!memcmp(snapshot,rows,cfsize));assert(!im2_cfstrings_clear());
     printf("PASS private owner metadata only: %zu literals, %zu ASCII, %zu UTF-16 independently decoded with iconv; no guest ARM execution\n",count,ascii,wide);
     free(snapshot);free(im.file);
@@ -110,5 +122,6 @@ int main(int argc,char **argv){
     Im2ObjcClass *root=im2_objc_register_class("NSObject",NULL,sizeof(Im2ObjcObject),NULL,0,NULL,0);assert(root);
     Im2FoundationConfig cfg={"/tmp",NULL,NULL,NULL};assert(!im2_foundation_init(root,&cfg));
     Im2ObjcClass *strings=im2_objc_class_named("NSString");assert(strings);
+    assert(!im2_collections_init(root,NULL));
     synthetic(strings);if(argc==2)owner(argv[1],strings);else assert(argc==1);
 }

@@ -13,6 +13,8 @@ typedef struct {
 } Im2FoundationConfig;
 int im2_foundation_init(Im2ObjcClass *root,const Im2FoundationConfig *);
 Im2String *im2_string_create(const char *,int autorelease);
+Im2String *im2_string_create_bytes(const char *,size_t bytes,int autorelease);
+size_t im2_string_byte_length(const void *);
 const char *im2_string_utf8(const void *);
 int im2_utf8_utf16_length(const char *,size_t bytes,uint32_t *length);
 int im2_string_get_cstring(const void *,char *out,size_t capacity,uint32_t encoding);

@@ -68,11 +68,20 @@ static int string_assign(Im2String *o,const char *text,uint32_t encoding) {
     char *copy=duplicate(text);if(!copy)return -1;
     free(o->str);o->str=copy;o->bytes=(uint32_t)bytes;o->flags=0x7c8;return 0;
 }
-Im2String *im2_string_create(const char *text,int autorelease) {
-    if(!strings || !text)return NULL;
+Im2String *im2_string_create_bytes(const char *text,size_t bytes,int autorelease) {
+    uint32_t units;
+    if(!strings || !text || bytes>IM2_FOUNDATION_MAX_DATA || im2_utf8_utf16_length(text,bytes,&units))return NULL;
     Im2String *o=im2_objc_alloc(strings,string_cleanup);if(!o)return NULL;
-    if(string_assign(o,text,IM2_NS_UTF8)){im2_objc_release(o);return NULL;}
+    o->str=malloc(bytes+1);if(!o->str){im2_objc_release(o);return NULL;}
+    memcpy(o->str,text,bytes);o->str[bytes]=0;o->bytes=(uint32_t)bytes;o->flags=0x7c8;
     return finish(o,autorelease);
+}
+Im2String *im2_string_create(const char *text,int autorelease) {
+    return text?im2_string_create_bytes(text,strlen(text),autorelease):NULL;
+}
+size_t im2_string_byte_length(const void *o) {
+    size_t bytes;if(im2_cfstring_utf8(o,&bytes,NULL))return bytes;
+    return kind_of(o,strings)?((const Im2String *)o)->bytes:0;
 }
 const char *im2_string_utf8(const void *o) {
     const char *literal=im2_cfstring_utf8(o,NULL,NULL);if(literal)return literal;
@@ -155,7 +164,7 @@ static uintptr_t string_init_encoding(Im2String *self,const char *sel,const char
 static uintptr_t string_utf8(void *self,const char *sel){(void)sel;return (uintptr_t)im2_string_utf8(self);}
 static uintptr_t string_length(void *self,const char *sel){(void)sel;uint32_t literal_units;
     if(im2_cfstring_utf8(self,NULL,&literal_units))return literal_units;
-    const char *s=im2_string_utf8(self);uint32_t n=0;if(!s || im2_utf8_utf16_length(s,strlen(s),&n))fail("Invalid NSString UTF-8");return n;}
+    const char *s=im2_string_utf8(self);uint32_t n=0;if(!s || im2_utf8_utf16_length(s,im2_string_byte_length(self),&n))fail("Invalid NSString UTF-8");return n;}
 static uintptr_t string_get(void *self,const char *sel,char *out,size_t n,uint32_t enc){(void)sel;return im2_string_get_cstring(self,out,n,enc)==0;}
 static uintptr_t string_cencoding(void *self,const char *sel,uint32_t enc){(void)sel;const char *s=im2_string_utf8(self);if(!s)return 0;if(enc==IM2_NS_ASCII){for(const unsigned char *p=(const unsigned char *)s;*p;p++)if(*p>=128)return 0;}else if(enc!=IM2_NS_UTF8)return 0;return (uintptr_t)s;}
 static uintptr_t immutable_copy(void *self,const char *sel){(void)sel;return (uintptr_t)im2_objc_retain(self);}

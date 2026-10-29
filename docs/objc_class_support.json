@@ -277,9 +277,10 @@
     {
       "name": "NSArray",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
-      "physical_vita_verified": false
+      "physical_vita_verified": false,
+      "scope_evidence": "docs/COLLECTIONS_PROGRESS_2026-10-30_TR.md"
     },
     {
       "name": "NSAssertionHandler",
@@ -312,9 +313,10 @@
     {
       "name": "NSDictionary",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
-      "physical_vita_verified": false
+      "physical_vita_verified": false,
+      "scope_evidence": "docs/COLLECTIONS_PROGRESS_2026-10-30_TR.md"
     },
     {
       "name": "NSIndexPath",
@@ -326,16 +328,18 @@
     {
       "name": "NSMutableArray",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
-      "physical_vita_verified": false
+      "physical_vita_verified": false,
+      "scope_evidence": "docs/COLLECTIONS_PROGRESS_2026-10-30_TR.md"
     },
     {
       "name": "NSMutableDictionary",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
-      "physical_vita_verified": false
+      "physical_vita_verified": false,
+      "scope_evidence": "docs/COLLECTIONS_PROGRESS_2026-10-30_TR.md"
     },
     {
       "name": "NSNumber",
