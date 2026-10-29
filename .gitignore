@@ -1,0 +1,11 @@
+*.ipa
+*.app/
+*.vpk
+*.self
+*.elf
+*.bin
+*.dylib
+*.a
+*.o
+original_ipa_extracted/
+__pycache__/
