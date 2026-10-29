@@ -18,6 +18,7 @@
 #include "log.h"
 #include "macho.h"
 #include "macho_reloc.h"
+#include "macho_name.h"
 
 #define LC_SEGMENT 0x1
 #define LC_SYMTAB 0x2
@@ -414,14 +415,15 @@ int macho_load(const char *bin_path, const char *rebase_path) {
         if (cmd == LC_SEGMENT) {
             if (size < 56u) return -1;
             segment_command *s = (segment_command *)(d + off);
-            if (!strcmp(s->segname, "__TEXT"))
+            if (im2_macho_name_equal(s->segname, "__TEXT"))
                 seg_text = s;
-            else if (!strcmp(s->segname, "__DATA"))
+            else if (im2_macho_name_equal(s->segname, "__DATA"))
                 seg_data = s;
             if (s->nsects > (size - 56u) / sizeof(section))
                 return -1;
             section *sec = (section *)(d + off + 56);
-            for (uint32_t i = 0; i < s->nsects && nsects_total < 64; i++)
+            if (s->nsects > 64u - (uint32_t)nsects_total) return -1;
+            for (uint32_t i = 0; i < s->nsects; i++)
                 sects[nsects_total++] = &sec[i];
         } else if (cmd == LC_SYMTAB) {
             if (size < 24u) return -1;
@@ -526,7 +528,7 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     // Initialize special sections
     for (int i = 0; i < nsects_total; i++) {
         section *s = sects[i];
-        if (!strcmp(s->sectname, "__mod_init_func")) {
+        if (im2_macho_name_equal(s->sectname, "__mod_init_func")) {
             if ((s->size & 3u) || s->addr < data_vm ||
                 (uint64_t)s->addr + s->size > (uint64_t)data_vm + data_size)
                 return -1;
@@ -557,8 +559,8 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     // A missing/unsupported relocation must not leave a nil classref behind.
     for (int sec_idx = 0; sec_idx < nsects_total; sec_idx++) {
         const section *sec = sects[sec_idx];
-        if (strcmp(sec->sectname, "__objc_classrefs") &&
-            strcmp(sec->sectname, "__objc_superrefs"))
+        if (!im2_macho_name_equal(sec->sectname, "__objc_classrefs") &&
+            !im2_macho_name_equal(sec->sectname, "__objc_superrefs"))
             continue;
         if ((sec->size & 3u) || sec->addr < data_vm ||
             (uint64_t)sec->addr + sec->size > (uint64_t)data_vm + data_size)

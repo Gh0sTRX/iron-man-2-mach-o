@@ -1,4 +1,5 @@
 #include "macho_reloc.h"
+#include "macho_name.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -9,6 +10,10 @@ static int resolve(void *ctx,uint32_t index,uint32_t *out) {(void)ctx;resolves++
 static void put(uint8_t *p,uint32_t n){p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);p[2]=(uint8_t)(n>>16);p[3]=(uint8_t)(n>>24);}
 static uint32_t get(uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 int main(void) {
+    const char full_name[16]={'_','_','o','b','j','c','_','c','l','a','s','s','r','e','f','s'};
+    assert(im2_macho_name_equal(full_name,"__objc_classrefs"));
+    assert(!im2_macho_name_equal(full_name,"__objc_classref"));
+    assert(!im2_macho_name_equal(full_name,"__objc_classrefsX"));
     uint8_t records[16],original[16];char error[128];
     put(records,0x1004);put(records+4,0x0c000001);put(records+8,0x1000);put(records+12,0x0c000000);
     put(bytes,8);put(bytes+4,0xfffffffc);memcpy(original,bytes,16);

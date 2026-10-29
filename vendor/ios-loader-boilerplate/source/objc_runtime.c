@@ -14,6 +14,7 @@ typedef struct {
     Im2ClassRO ro,meta_ro;
     Im2ClassRW rw,meta_rw;
     MethodList instance_methods,class_methods;
+    const void *instance_lists[2],*class_lists[2];
     size_t instance_stret[METHOD_LIMIT],class_stret[METHOD_LIMIT];
 } ClassEntry;
 typedef struct Object {
@@ -85,10 +86,12 @@ Im2ObjcClass *im2_objc_register_class(const char *name,Im2ObjcClass *super,size_
     e->ro.methods=&e->instance_methods; e->meta_ro.methods=&e->class_methods;
     e->rw.flags=e->meta_rw.flags=RW_REALIZED;
     e->rw.ro=&e->ro; e->meta_rw.ro=&e->meta_ro;
-    e->rw.methods=&e->instance_methods; e->meta_rw.methods=&e->class_methods;
+    e->instance_lists[0]=&e->instance_methods; e->class_lists[0]=&e->class_methods;
+    e->rw.methods=e->instance_lists; e->meta_rw.methods=e->class_lists;
     e->cls=(Im2ObjcClass){&e->meta,super,NULL,NULL,&e->rw};
     Im2ObjcClass *rootmeta=super?classes[0].cls.isa:&e->meta;
     e->meta=(Im2ObjcClass){rootmeta,super?super->isa:&e->cls,NULL,NULL,&e->meta_rw};
+    if(super) {e->rw.next_sibling=super->data->first_subclass;super->data->first_subclass=&e->cls;}
     class_count++; return &e->cls;
 }
 static Object *object_record(const void *p) {

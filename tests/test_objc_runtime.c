@@ -30,6 +30,9 @@ int main(void) {
     const Im2MethodSpec methods[]={{"override","v@:",child_method,0},{"size","{Size=ff}@:",struct_method,8}};
     child=im2_objc_register_class("NSString",root,sizeof(Im2ObjcObject)+16,methods,2,NULL,0);
     assert(child && child->isa->isa==root->isa && child->isa->superclass==root->isa);
+    assert(root->data->first_subclass==child);
+    assert(((const void *const *)child->data->methods)[0]==child->data->ro->methods);
+    assert(((const void *const *)child->data->methods)[1]==NULL);
     assert(child->superclass==root && child->data->ro->instance_start==sizeof(Im2ObjcObject));
     assert(!im2_objc_register_class("NSString",root,64,NULL,0,NULL,0));
     assert(!im2_objc_register_class("OtherRoot",NULL,64,NULL,0,NULL,0));
