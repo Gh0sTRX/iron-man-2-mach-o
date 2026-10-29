@@ -110,7 +110,7 @@ static void array_replace(Array *a,const char *sel,size_t index,void *value){
 }
 static void array_remove(Array *a,const char *sel,size_t index){
     (void)sel;if(index>=a->count)fail("NSMutableArray removal outside bounds");
-    void *old=a->items[index];memmove(a->items+index,a->items+index+1,(a->count-index-1)*sizeof(*a->items));a->count--;a->mutation++;im2_objc_release(old);
+    void *old=a->items[index];memmove(a->items+index,a->items+index+1,(a->count-index-1)*sizeof(*a->items));a->count--;a->items[a->count]=NULL;a->mutation++;im2_objc_release(old);
 }
 static void array_remove_last(Array *a,const char *sel){if(a->count)array_remove(a,sel,a->count-1);}
 static void array_remove_all(Array *a,const char *sel){(void)sel;array_clear(a);}
