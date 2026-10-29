@@ -499,6 +499,53 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     if (apply_rebase(rebase_path) != 0)
         return -1;
 
+    // ObjC classrefs are S_REGULAR in the original Iron Man 2 Mach-O.
+    // Resolve their external relocations from LC_DYSYMTAB; indirect pointers
+    // alone do NOT cover these class objects.
+    unsigned unresolved_objc_classes = 0;
+    if (dysym && dysym->nextrel) {
+        if ((uint64_t)dysym->extreloff + (uint64_t)dysym->nextrel * 8u > slice_len)
+            return -1;
+        for (uint32_t i = 0; i < dysym->nextrel; i++) {
+            const uint8_t *rec = d + dysym->extreloff + i * 8u;
+            uint32_t va = *(const uint32_t *)rec;
+            uint32_t info = *(const uint32_t *)(rec + 4);
+            // Mach-O relocation_info: symbolnum[23:0], pcrel[24],
+            // length[26:25], extern[27], type[31:28].
+            if (!(info & 0x08000000u) || (va & 0x80000000u))
+                continue;
+            if (va < data_vm || (uint64_t)va + 4u > (uint64_t)data_vm + data_size)
+                continue;
+            if ((info & 0x06000000u) != 0x04000000u || (info & 0x01000000u) ||
+                (info & 0xf0000000u))
+                continue; // only vanilla, absolute, 32-bit relocations
+            uint32_t idx = info & 0x00ffffffu;
+            if (!symtab || !strtab || idx >= nsyms ||
+                symtab[idx].n_strx >= strtab_size)
+                return -1;
+            const char *name = strtab + symtab[idx].n_strx;
+            if (!memchr(name, 0, strtab_size - symtab[idx].n_strx))
+                return -1;
+            if (strncmp(name, "_OBJC_CLASS_$_", 14) != 0 &&
+                strncmp(name, "_OBJC_METACLASS_$_", 18) != 0)
+                continue;
+            const import_entry *imp = imports_lookup(name);
+            if (!imp || !imp->data) {
+                if (unresolved_objc_classes < 20u)
+                    l_warn("Unresolved ObjC class data relocation: %s", name);
+                unresolved_objc_classes++;
+                continue;
+            }
+            uint32_t *slot = (uint32_t *)(uintptr_t)(macho_slide + va);
+            *slot = imp->addr;
+        }
+    }
+    if (unresolved_objc_classes) {
+        l_error("Unresolved ObjC class/metaclass relocations: %u",
+                unresolved_objc_classes);
+        return -1;
+    }
+
     // Resolve dynamic symbol imports. Unknown iOS APIs are fatal to readiness:
     // a zero-returning fallback thunk would hide a broken compatibility layer.
     unsigned unresolved_imports = 0;
