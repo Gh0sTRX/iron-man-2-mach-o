@@ -310,7 +310,7 @@ static void log_unknown(void *self, const char *sel) {
     l_error("objc_msgSend(%p, %s) -> nil", self, sel);
 }
 
-static int sel_is(const char *sel, const char *name) { return !strcmp(sel, name); }
+static int sel_is(const char *sel, const char *name) { return sel && name && !strcmp(sel, name); }
 
 static uint32_t objc_msgSend(void *self, const char *sel, ...) {
     va_list ap;
@@ -378,6 +378,12 @@ static uint32_t objc_msgSend(void *self, const char *sel, ...) {
 
 // Methods returning composite structs (CGSize/CGPoint): first argument is return pointer.
 static void objc_msgSend_stret(float *ret, void *self, const char *sel, ...) {
+    if (!ret)
+        return;
+    if (!sel) {
+        ret[0] = ret[1] = 0;
+        return;
+    }
     va_list ap;
     va_start(ap, sel);
     if (sel_is(sel, "sizeWithFont:")) {
