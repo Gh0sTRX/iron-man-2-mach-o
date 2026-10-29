@@ -6,13 +6,10 @@
 #include <stdint.h>
 
 /**
- * @brief Fixed virtual address offset where 32-bit iOS Mach-O binaries are loaded on PS Vita.
- * @details The original iOS executable is typically linked at base 0x1000.
- *          It is loaded shifted to an unused Vita user memory space:
- *          runtime_addr = original_addr + MACHO_SLIDE.
- *          Crash PC addresses can be translated directly by subtracting 0x98000000.
+ * @brief Runtime VM slide derived from the actual contiguous Vita allocation.
+ * @note This is not a fixed compile-time address. Only meaningful after mapping.
  */
-#define MACHO_SLIDE 0x98000000u
+uint32_t macho_get_runtime_slide(void);
 
 /**
  * @brief Loads a Mach-O executable, allocates memory blocks, and applies rebases.
