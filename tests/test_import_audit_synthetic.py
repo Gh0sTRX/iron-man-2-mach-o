@@ -25,6 +25,7 @@ const import_entry darwin_imports[] = {
 static void bind_class_imports(void) {
     const char *names[]={"_OBJC_CLASS_$_NSData","_OBJC_METACLASS_$_NSData"};
     class_imports[0]=(import_entry){names[0],data_class,IM2_IMPORT_DATA};
+    class_imports[1]=(import_entry){"___CFConstantStringClassReference",string_class,IM2_IMPORT_DATA};
 }
 ''')
     have=audit.table_names(src)
@@ -36,7 +37,8 @@ static void bind_class_imports(void) {
     assert "_also_not_an_import" not in have
     assert "_objc_msgSend" in have
     assert "_OBJC_CLASS_$_NSData" in have and "_OBJC_METACLASS_$_NSData" in have
-    assert len(have)==7,have
+    assert "___CFConstantStringClassReference" in have
+    assert len(have)==8,have
     expected=src/"original.json"
     expected.write_text('{"dynamic_imports":["_malloc","_glBindTexture","_missing"]}')
     requested=audit.original_names(expected)

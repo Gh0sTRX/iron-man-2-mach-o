@@ -4,7 +4,7 @@
  * @details In iOS ARMv6, variadic arguments are packed into 32-bit words WITHOUT 8-byte alignment:
  *          a double or long long occupies the next 2 consecutive words (even across r3 and stack).
  *          Standard newlib (AAPCS) forces 8-byte alignment and reads garbage. This implementation
- *          consumes arguments word-by-word, supporting %@ (NSString/CFString with C-string at +8)
+ *          consumes arguments word-by-word, supporting %@ via a registered NSString resolver
  *          and unaligned double/long long arguments.
  *          Self-contained with no PS Vita dependencies (verified via tools/printf_check.py).
  */
@@ -12,6 +12,9 @@
 #include <string.h>
 
 #include "darwin_printf.h"
+
+static const char *(*object_string)(const void *);
+void darwin_set_object_string_resolver(const char *(*resolver)(const void *)) { object_string=resolver; }
 
 // In iOS ARMv6, variadic arguments are packed into 32-bit words without 8-byte alignment:
 // a double or long long occupies the next 2 words. newlib (AAPCS) would align to 8 and read
@@ -61,7 +64,7 @@ int darwin_vformat(char *out, size_t size, const char *fmt, words *w) {
 #define EMIT(v) (nstar == 0 ? snprintf(dst, room, spec, v) \
                  : nstar == 1 ? snprintf(dst, room, spec, star[0], v) : snprintf(dst, room, spec, star[0], star[1], v))
         int r = 0;
-        if (ll && strchr("diouxX", conv)) {
+        if (conv && ll && strchr("diouxX", conv)) {
             spec[k++] = 'l', spec[k++] = 'l', spec[k++] = conv, spec[k] = 0;
             r = EMIT(dword(w));
         } else if (conv && strchr("diouxXc", conv)) {
@@ -71,9 +74,14 @@ int darwin_vformat(char *out, size_t size, const char *fmt, words *w) {
             union { uint64_t u; double d; } v = {dword(w)};
             spec[k++] = conv, spec[k] = 0;
             r = EMIT(v.d);
-        } else if (conv == 's' || conv == '@') { // %@: NSString/CFString, C string pointer at offset +8
+        } else if (conv == 's' || conv == '@') {
             uint32_t v = word(w);
-            const char *s = !v ? "(null)" : conv == '@' ? *(const char **)(uintptr_t)(v + 8) : (const char *)(uintptr_t)v;
+            const char *s = !v ? "(null)" : conv == '@' ?
+                (object_string ? object_string((const void *)(uintptr_t)v) : NULL) : (const char *)(uintptr_t)v;
+            if (!s) {
+                if (size) out[n < size ? n : size-1]=0;
+                return -1;
+            }
             spec[k++] = 's', spec[k] = 0;
             r = EMIT(s);
         } else if (conv == 'p') {

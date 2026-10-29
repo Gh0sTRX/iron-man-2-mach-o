@@ -23,3 +23,7 @@ size_t im2_data_length(const void *);
 int im2_data_get_bytes(const void *,void *out,size_t length);
 /* Returned path is malloc-owned; missing resources return NULL. */
 char *im2_bundle_resource_path(const char *name,const char *extension,const char *directory);
+/* Imported ARM32 CFString constants are borrowed and immutable. */
+#include "objc_guest.h"
+int im2_foundation_register_cfstrings(uint32_t address,size_t count,Im2GuestRead read,
+    void *context,char *error,size_t error_size);

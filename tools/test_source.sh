@@ -32,7 +32,16 @@ python3 tests/test_scanner.py
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
   -pthread -I vendor/ios-loader-boilerplate/source tests/test_foundation.c \
   vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_foundation
 build/host-runtime/test_foundation
 
 python3 tests/test_preflight_synthetic.py
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -no-pie -pthread -I vendor/ios-loader-boilerplate/source tests/test_cfstrings.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/darwin_printf.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_cfstrings
+build/host-runtime/test_cfstrings

@@ -41,5 +41,7 @@ for name in ('objc_msgSend','objc_msgSend_stret','objc_msgSendSuper2','objc_msgS
     target,kind=entries['_'+name]
     assert kind==2, (name,'assembly dispatcher must bypass generic stack-copy thunk')
     assert target==symbols['im2_'+name+'_entry']
-assert entries['_objc_getClass'][1]==0
+for name in ('objc_getClass','CFStringGetCString','CFRelease','CFRetain','NSClassFromString'):
+    target,kind=entries['_'+name]
+    assert target and kind==0, (name,'C bridges must use the ABI thunk')
 print('PASS: linked ARM ELF contains four direct assembly dispatch imports and ordinary bridged C imports')

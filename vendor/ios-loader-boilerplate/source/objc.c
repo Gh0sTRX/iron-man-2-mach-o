@@ -24,7 +24,7 @@
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[10];
+static import_entry class_imports[11];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -38,6 +38,7 @@ static void bind_class_imports(void) {
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
+    class_imports[10]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -70,8 +71,9 @@ static ns_string *ns_format(const char *fmt, va_list ap) {
     va_list cp;
     va_copy(cp, ap);
     words w = {&cp, NULL};
-    darwin_vformat(out, sizeof(out), fmt, &w);
+    int result=darwin_vformat(out, sizeof(out), fmt, &w);
     va_end(cp);
+    if(result<0 || (size_t)result>=sizeof(out))fatal_error("Unsupported or oversized NSString format");
     return ns_new(out);
 }
 
@@ -320,14 +322,14 @@ static void *object_init(void *self,const char *sel) { (void)sel; return self; }
 static void *object_retain(void *self,const char *sel) { (void)sel; return im2_objc_retain(self); }
 static void object_release(void *self,const char *sel) {
     (void)sel;
-    if(((Im2ObjcObject *)self)->isa==pool_class) {
+    if(im2_objc_object_class(self)==pool_class) {
         if(im2_objc_pool_drain(self)) fatal_error("Invalid autorelease pool release order");
     } else if(im2_objc_release(self)) fatal_error("release on unknown Objective-C object");
 }
 static void *object_autorelease(void *self,const char *sel) {
     (void)sel; if(!im2_objc_autorelease(self)) fatal_error("autorelease without active pool"); return self;
 }
-static Im2ObjcClass *object_class(void *self,const char *sel) { (void)sel; return ((Im2ObjcObject *)self)->isa; }
+static Im2ObjcClass *object_class(void *self,const char *sel) { (void)sel; return im2_objc_object_class(self); }
 static Im2ObjcClass *class_class(Im2ObjcClass *self,const char *sel) { (void)sel;return self; }
 static uint32_t object_responds(void *self,const char *sel,const char *query) {
     (void)sel;return im2_objc_lookup(self,query,NULL)!=NULL;
@@ -372,6 +374,7 @@ void objc_init(void) {
     const Im2FoundationConfig foundation={BUNDLE_PATH,(Im2Imp)string_format,foundation_failure,darwin_path};
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
     string_class=im2_objc_class_named("NSString");
+    darwin_set_object_string_resolver(im2_string_utf8);
     const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
     pool_class=im2_objc_register_class("NSAutoreleasePool",root,sizeof(Im2ObjcObject),pool_methods,2,NULL,0);
     if(!root || !string_class || !pool_class) fatal_error("ObjC class registry initialization failed");
@@ -379,8 +382,26 @@ void objc_init(void) {
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<10;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<11;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
+}
+
+static uint32_t cf_string_get_cstring(void *string,char *buffer,int32_t capacity,uint32_t encoding) {
+    if(capacity<=0)return 0;
+    uint32_t nsencoding=encoding==0x08000100u?IM2_NS_UTF8:encoding==0x0600u?IM2_NS_ASCII:0;
+    return nsencoding && im2_string_get_cstring(string,buffer,(size_t)capacity,nsencoding)==0;
+}
+static void cf_release(void *value) {
+    if(!value || im2_objc_release(value))fatal_error("CFRelease on unsupported object");
+}
+static void *cf_retain(void *value) {
+    if(!value || !im2_objc_retain(value))fatal_error("CFRetain on unsupported object");
+    return value;
+}
+static void *ns_class_from_string(void *string) {
+    const char *name=im2_string_utf8(string);
+    if(!name)fatal_error("NSClassFromString requires a supported NSString");
+    return im2_objc_class_named(name);
 }
 
 // ---------------------------------------------------------------- table
@@ -389,6 +410,8 @@ const import_entry *objc_class_import(const char *name) {
 #define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
 
 const import_entry objc_imports[] = {
+    F(CFStringGetCString, cf_string_get_cstring),F(CFRelease, cf_release),F(CFRetain, cf_retain),
+    F(NSClassFromString, ns_class_from_string),
     F_ABI(objc_msgSend, im2_objc_msgSend_entry), F_ABI(objc_msgSend_stret, im2_objc_msgSend_stret_entry),
     F_ABI(objc_msgSendSuper2, im2_objc_msgSendSuper2_entry),
     F_ABI(objc_msgSendSuper2_stret, im2_objc_msgSendSuper2_stret_entry),

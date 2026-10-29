@@ -26,7 +26,7 @@ def table_names(source_dir):
                             re.finditer(r'"(_[A-Za-z_][A-Za-z0-9_$]*)"',table))
         binder=re.search(r"static\s+void\s+bind_class_imports\s*\(void\)\s*\{(.*?)^\}",data,re.S|re.M)
         if binder and 'IM2_IMPORT_DATA' in binder.group(1):
-            provided.update(re.findall(r'"(_OBJC_(?:META)?CLASS_\$_[A-Za-z_][A-Za-z0-9_]*)"',binder.group(1)))
+            provided.update(re.findall(r'"(_OBJC_(?:META)?CLASS_\$_[A-Za-z_][A-Za-z0-9_]*|___CFConstantStringClassReference)"',binder.group(1)))
     return provided
 
 def original_names(path):

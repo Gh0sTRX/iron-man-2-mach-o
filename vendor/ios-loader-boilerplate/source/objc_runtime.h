@@ -57,3 +57,7 @@ size_t im2_objc_registration_checkpoint(void);
 int im2_objc_registration_rollback(size_t checkpoint);
 /* Returns the known ISA identity without dereferencing an unregistered receiver. */
 Im2ObjcClass *im2_objc_object_class(const void *receiver);
+/* Startup/teardown only. Registers borrowed immutable identities without writing
+ * or freeing their image storage. The batch is atomic; retain/release are no-ops. */
+int im2_objc_register_static_objects(void *const *identities,size_t count,Im2ObjcClass *cls);
+int im2_objc_unregister_static_objects(void *const *identities,size_t count);

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT. Independently authored; no Apple/Swift implementation copied. */
 #include "foundation.h"
+#include "cfstring.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,7 +52,7 @@ int im2_utf8_utf16_length(const char *text,size_t bytes,uint32_t *length) {
     }
     *length=units;return 0;
 }
-static void string_cleanup(void *o){free(((Im2String *)o)->str);((Im2String *)o)->str=NULL;}
+static void string_cleanup(void *o){if(im2_cfstring_utf8(o,NULL,NULL))fail("Cannot deallocate a constant string");free(((Im2String *)o)->str);((Im2String *)o)->str=NULL;}
 static void data_cleanup(void *o){free(((Data *)o)->bytes);((Data *)o)->bytes=NULL;}
 static void bundle_cleanup(void *o){free(((Bundle *)o)->path);((Bundle *)o)->path=NULL;}
 static void *finish(void *o,int autorelease) {
@@ -59,7 +60,7 @@ static void *finish(void *o,int autorelease) {
     return o;
 }
 static int string_assign(Im2String *o,const char *text,uint32_t encoding) {
-    if(!kind_of(o,strings) || !text)return -1;
+    if(!kind_of(o,strings) || !text || im2_cfstring_utf8(o,NULL,NULL))return -1;
     size_t bytes=strlen(text);uint32_t units;
     if(bytes>IM2_FOUNDATION_MAX_DATA || im2_utf8_utf16_length(text,bytes,&units))return -1;
     if(encoding==IM2_NS_ASCII) {for(size_t i=0;i<bytes;i++)if((unsigned char)text[i]>=128)return -1;}
@@ -74,12 +75,15 @@ Im2String *im2_string_create(const char *text,int autorelease) {
     return finish(o,autorelease);
 }
 const char *im2_string_utf8(const void *o) {
+    const char *literal=im2_cfstring_utf8(o,NULL,NULL);if(literal)return literal;
     if(!kind_of(o,strings))return NULL;
     return ((const Im2String *)o)->str?((const Im2String *)o)->str:"";
 }
 int im2_string_get_cstring(const void *o,char *out,size_t capacity,uint32_t encoding) {
     const char *s=im2_string_utf8(o);if(!s || !out)return -1;
-    size_t n=strlen(s);if(capacity<=n)return -1;
+    size_t n;
+    if(!im2_cfstring_utf8(o,&n,NULL))n=((const Im2String *)o)->bytes;
+    if(capacity<=n)return -1;
     if(encoding==IM2_NS_ASCII){for(size_t i=0;i<n;i++)if((unsigned char)s[i]>=128)return -1;}
     else if(encoding!=IM2_NS_UTF8)return -1;
     memcpy(out,s,n+1);return 0;
@@ -149,7 +153,9 @@ static uintptr_t string_factory(void *self,const char *sel,const char *text){(vo
 static uintptr_t string_init(Im2String *self,const char *sel,const char *s){(void)sel;if(string_assign(self,s,IM2_NS_UTF8)){im2_objc_release(self);return 0;}return (uintptr_t)self;}
 static uintptr_t string_init_encoding(Im2String *self,const char *sel,const char *s,uint32_t encoding){(void)sel;if(string_assign(self,s,encoding)){im2_objc_release(self);return 0;}return (uintptr_t)self;}
 static uintptr_t string_utf8(void *self,const char *sel){(void)sel;return (uintptr_t)im2_string_utf8(self);}
-static uintptr_t string_length(void *self,const char *sel){(void)sel;const char *s=im2_string_utf8(self);uint32_t n=0;if(!s || im2_utf8_utf16_length(s,strlen(s),&n))fail("Invalid NSString UTF-8");return n;}
+static uintptr_t string_length(void *self,const char *sel){(void)sel;uint32_t literal_units;
+    if(im2_cfstring_utf8(self,NULL,&literal_units))return literal_units;
+    const char *s=im2_string_utf8(self);uint32_t n=0;if(!s || im2_utf8_utf16_length(s,strlen(s),&n))fail("Invalid NSString UTF-8");return n;}
 static uintptr_t string_get(void *self,const char *sel,char *out,size_t n,uint32_t enc){(void)sel;return im2_string_get_cstring(self,out,n,enc)==0;}
 static uintptr_t string_cencoding(void *self,const char *sel,uint32_t enc){(void)sel;const char *s=im2_string_utf8(self);if(!s)return 0;if(enc==IM2_NS_ASCII){for(const unsigned char *p=(const unsigned char *)s;*p;p++)if(*p>=128)return 0;}else if(enc!=IM2_NS_UTF8)return 0;return (uintptr_t)s;}
 static uintptr_t immutable_copy(void *self,const char *sel){(void)sel;return (uintptr_t)im2_objc_retain(self);}
@@ -201,4 +207,9 @@ int im2_foundation_init(Im2ObjcClass *root,const Im2FoundationConfig *cfg) {
     }
     size_t len=strlen(main_bundle->path);while(len>1 && main_bundle->path[len-1]=='/')main_bundle->path[--len]=0;
     return 0;
+}
+
+int im2_foundation_register_cfstrings(uint32_t address,size_t count,Im2GuestRead read,
+    void *context,char *error,size_t error_size) {
+    return im2_cfstrings_register(address,count,strings,read,context,error,error_size);
 }

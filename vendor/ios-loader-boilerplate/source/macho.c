@@ -21,6 +21,7 @@
 #include "macho_name.h"
 #include "macho_init.h"
 #include "objc_guest.h"
+#include "foundation.h"
 
 #define LC_SEGMENT 0x1
 #define LC_SYMTAB 0x2
@@ -693,6 +694,16 @@ int macho_load(const char *bin_path, const char *rebase_path) {
             l_error("Guest class registry rollback failed");
         l_error("Guest Objective-C class/reference validation failed: %s",class_error);
         return -1;
+    }
+
+    for(int i=0;i<nsects_total;i++) {
+        const section *sec=sects[i];if(!im2_macho_name_equal(sec->sectname,"__cfstring"))continue;
+        if(sec->size%16u || sec->addr<data_vm || (uint64_t)sec->addr+sec->size>(uint64_t)data_vm+data_size) return -1;
+        char error[160];
+        if(im2_foundation_register_cfstrings(macho_slide+sec->addr,sec->size/16u,
+            read_guest_metadata,NULL,error,sizeof(error))) {
+            l_error("CFString constant registration rejected: %s",error);return -1;
+        }
     }
 
     // Copy final __TEXT to executable memory block

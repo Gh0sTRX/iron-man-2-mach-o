@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "darwin_printf.h"
+#include "foundation.h"
 #include "hle.h"
 #include "imports.h"
 #include "log.h"
@@ -91,14 +92,17 @@ static void d___assert_rtn(const char *func, const char *file, int line, const c
     l_error("guest assertion failed: %s (%s:%d %s)", expr, file, line, func);
 }
 
-// NSLog(@"format", ...): format is a CFString (C string pointer at +8).
+// NSLog accepts both heap NSStrings and registered ASCII/UTF-16 constants.
 static void d_NSLog(void *cfstr, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, cfstr);
     words w = {&ap, NULL};
-    darwin_vformat(buf, sizeof(buf), cfstr ? *(const char **)((uint8_t *)cfstr + 8) : "(nil)", &w);
+    const char *format=cfstr ? im2_string_utf8(cfstr) : "(nil)";
+    if(!format)fatal_error("Unsupported NSLog format object");
+    int result=darwin_vformat(buf, sizeof(buf), format, &w);
     va_end(ap);
+    if(result<0)fatal_error("Unsupported NSLog argument object");
     l_info("NSLog: %s", buf);
 }
 

@@ -21,8 +21,8 @@
   "rbs1_generator": "MetalSyntax/Zombie-Infection-vita tools/macho_prep.py",
   "rbs1_generator_commit": "2eddb96859841a0ed98e2722aa64034d5cbfa741",
   "original_plus_11_negative_tests_passed": true,
-  "native_loader_name_matches": 175,
-  "native_loader_missing_names": 315,
+  "native_loader_name_matches": 179,
+  "native_loader_missing_names": 311,
   "name_matches_are_not_abi_validation": true,
   "reference_menu": {
     "reference_runtime": "touchHLE v0.3.0 (unmodified upstream, Linux x86_64)",
@@ -41,5 +41,12 @@
       "title.png": "a77a9bcb3aeec43e3bc536d20da751f3949767851588e9b42b7b85664fbc8683"
     }
   },
-  "owner_assets_uploaded_to_github": false
+  "owner_assets_uploaded_to_github": false,
+  "native_loader_cfstring_owner_metadata_test": {
+    "passed": true,
+    "literals": 165,
+    "ascii": 147,
+    "utf16le": 18,
+    "guest_instructions_executed": false
+  }
 }

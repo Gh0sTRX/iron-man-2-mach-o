@@ -21,6 +21,7 @@ typedef struct {
 } ClassEntry;
 typedef struct Object {
     void *pointer; size_t refs; void (*destroy)(void *); struct Object *next;
+    Im2ObjcClass *isa;int immutable;
 } Object;
 typedef struct Autorelease { void *object; struct Autorelease *next; } Autorelease;
 typedef struct Pool { void *object; Autorelease *queued; struct Pool *parent; } Pool;
@@ -120,7 +121,7 @@ int im2_objc_lookup_target(const void *receiver,const char *selector,
     Im2ObjcClass *cls=metadata?metadata->isa:NULL;
     if(!metadata) {
         pthread_mutex_lock(&lock);Object *o=object_record(receiver);
-        if(o) cls=((const Im2ObjcObject *)receiver)->isa;
+        if(o) cls=o->isa;
         pthread_mutex_unlock(&lock);
     }
     if(current_class) {
@@ -172,7 +173,7 @@ int im2_objc_registration_rollback(size_t checkpoint) {
     if(checkpoint>class_count) return -1;
     pthread_mutex_lock(&lock);
     for(Object *o=objects;o;o=o->next) for(size_t i=checkpoint;i<class_count;i++)
-        if(((const Im2ObjcObject *)o->pointer)->isa==classes[i].identity) {pthread_mutex_unlock(&lock);return -1;}
+        if(o->isa==classes[i].identity) {pthread_mutex_unlock(&lock);return -1;}
     while(class_count>checkpoint) free_entry(&classes[--class_count]);
     rebuild_subclasses();pthread_mutex_unlock(&lock);return 0;
 }
@@ -181,13 +182,14 @@ void *im2_objc_alloc(Im2ObjcClass *cls,void (*destroy)(void *)) {
     if(!info || info->data->ro->flags&1u) return NULL;
     void *p=calloc(1,info->data->ro->instance_size); Object *o=malloc(sizeof(*o));
     if(!p || !o) {free(p);free(o);return NULL;}
-    ((Im2ObjcObject *)p)->isa=cls; *o=(Object){p,1,destroy,NULL};
+    ((Im2ObjcObject *)p)->isa=cls; *o=(Object){p,1,destroy,NULL,cls,0};
     pthread_mutex_lock(&lock); o->next=objects; objects=o; pthread_mutex_unlock(&lock); return p;
 }
 void *im2_objc_retain(void *p) {
     if(!p || im2_objc_is_class(p)) return p;
     pthread_mutex_lock(&lock); Object *o=object_record(p);
-    if(o && o->refs && o->refs<SIZE_MAX) o->refs++; else p=NULL;
+    if(o && o->immutable) {}
+    else if(o && o->refs && o->refs<SIZE_MAX) o->refs++; else p=NULL;
     pthread_mutex_unlock(&lock); return p;
 }
 size_t im2_objc_retain_count(const void *p) {
@@ -200,6 +202,7 @@ int im2_objc_release(void *p) {
     pthread_mutex_lock(&lock); Object **prev=&objects;
     while(*prev && (*prev)->pointer!=p) prev=&(*prev)->next;
     Object *o=*prev;
+    if(o && o->immutable) {pthread_mutex_unlock(&lock);return 0;}
     if(!o || !o->refs) {pthread_mutex_unlock(&lock);return -1;}
     if(--o->refs) {pthread_mutex_unlock(&lock);return 0;}
     /* Keep the dying object discoverable during its -dealloc chain. Zero refs
@@ -237,6 +240,8 @@ int im2_objc_pool_drain(void *object) {
 }
 void *im2_objc_autorelease(void *object) {
     if(!object || im2_objc_is_class(object)) return object;
+    pthread_mutex_lock(&lock);Object *known=object_record(object);int immutable=known && known->immutable;
+    pthread_mutex_unlock(&lock);if(immutable)return object;
     pthread_once(&pool_once,make_pool_key);
     Pool *p=pool_key_ok?pthread_getspecific(pool_key):NULL;
     if(!p || !im2_objc_retain_count(object)) return NULL;
@@ -247,6 +252,37 @@ void *im2_objc_autorelease(void *object) {
 Im2ObjcClass *im2_objc_object_class(const void *receiver) {
     const Im2ObjcClass *cls=im2_objc_class_metadata(receiver);if(cls)return cls->isa;
     pthread_mutex_lock(&lock);Object *o=object_record(receiver);
-    Im2ObjcClass *isa=o?((const Im2ObjcObject *)receiver)->isa:NULL;
+    Im2ObjcClass *isa=o?o->isa:NULL;
     pthread_mutex_unlock(&lock);return isa;
+}
+
+int im2_objc_register_static_objects(void *const *ids,size_t count,Im2ObjcClass *cls) {
+    const Im2ObjcClass *meta=im2_objc_class_metadata(cls);
+    if(!meta || meta->data->ro->flags&1 || count>4096 || (count && !ids))return -1;
+    Object *pending=NULL;int result=-1;
+    pthread_mutex_lock(&lock);
+    for(size_t i=0;i<count;i++) {
+        if(!ids[i] || im2_objc_is_class(ids[i]) || object_record(ids[i]))goto done;
+        for(Object *o=pending;o;o=o->next)if(o->pointer==ids[i])goto done;
+        Object *o=malloc(sizeof(*o));if(!o)goto done;
+        *o=(Object){ids[i],SIZE_MAX,NULL,pending,cls,1};pending=o;
+    }
+    while(pending){Object *o=pending;pending=o->next;o->next=objects;objects=o;}result=0;
+done:
+    pthread_mutex_unlock(&lock);
+    while(pending){Object *o=pending;pending=o->next;free(o);}return result;
+}
+int im2_objc_unregister_static_objects(void *const *ids,size_t count) {
+    if(count>4096 || (count && !ids))return -1;
+    pthread_mutex_lock(&lock);
+    for(size_t i=0;i<count;i++) {
+        Object *o=object_record(ids[i]);
+        if(!o || !o->immutable){pthread_mutex_unlock(&lock);return -1;}
+        for(size_t j=0;j<i;j++)if(ids[j]==ids[i]){pthread_mutex_unlock(&lock);return -1;}
+    }
+    for(size_t i=0;i<count;i++) {
+        Object **at=&objects;while((*at)->pointer!=ids[i])at=&(*at)->next;
+        Object *o=*at;*at=o->next;free(o);
+    }
+    pthread_mutex_unlock(&lock);return 0;
 }
