@@ -7,3 +7,7 @@ typedef const uint8_t *(*Im2GuestRead)(void *,uint32_t address,size_t bytes,int 
  * Class identities, method addresses, and guest object layouts remain original. */
 int im2_objc_register_guest_list(uint32_t classlist,size_t count,Im2GuestRead read,
     void *context,char *error,size_t error_size);
+/* A nonzero reference is insufficient: each slot must name a registered class
+ * or metaclass after the entire guest class batch has been installed. */
+int im2_objc_validate_guest_refs(uint32_t list,size_t count,Im2GuestRead read,
+    void *context,char *error,size_t error_size);

@@ -50,9 +50,24 @@ int main(void) {
     assert(!im2_objc_lookup_target(child,"makeGuest",NULL,&target) && target.guest && (uintptr_t)target.imp==BASE+0x1810);
     assert(!im2_objc_lookup_target(o,"inherited",(void *)(uintptr_t)(BASE+0x100),&target));
     assert(im2_objc_lookup_target(o,"inherited",root->isa,&target)); /* unrelated metaclass */
+    put(BASE+0x600,host);put(BASE+0x604,BASE+0x140);put(BASE+0x608,BASE+0x160);
+    assert(!im2_objc_validate_guest_refs(BASE+0x600,3,read_guest,NULL,error,sizeof(error)));
+    const uint32_t invalid_refs[]={0,BASE+0x200,BASE+0x1801,0xdead0000};
+    for(size_t i=0;i<sizeof(invalid_refs)/sizeof(invalid_refs[0]);i++) {
+        put(BASE+0x604,invalid_refs[i]);
+        assert(im2_objc_validate_guest_refs(BASE+0x600,3,read_guest,NULL,error,sizeof(error)));
+        assert(strstr(error,"0x00010604"));
+    }
+    put(BASE+0x604,BASE+0x140);
+    assert(im2_objc_validate_guest_refs(BASE+0x601,3,read_guest,NULL,error,sizeof(error)));
+    assert(im2_objc_validate_guest_refs(0xfffffffcu,2,read_guest,NULL,error,sizeof(error)));
+    assert(im2_objc_validate_guest_refs(BASE+0x1ffc,2,read_guest,NULL,error,sizeof(error)));
+    assert(im2_objc_validate_guest_refs(BASE+0x600,1000001,read_guest,NULL,error,sizeof(error)));
+    assert(!im2_objc_validate_guest_refs(BASE+0x600,0,read_guest,NULL,error,sizeof(error)));
     assert(im2_objc_registration_rollback(checkpoint)); /* live instance prevents removal */
     assert(!im2_objc_release(o));assert(!im2_objc_registration_rollback(checkpoint));
     assert(root->data->first_subclass==NULL);
+    assert(im2_objc_validate_guest_refs(BASE+0x600,3,read_guest,NULL,error,sizeof(error))); /* removed class IDs are stale */
     struct {uint32_t slot,value;} bad[]={
         {BASE+0x200+20,BASE+0x1ffc},{BASE+0x400,16},{BASE+0x404,65},
         {BASE+0x408,BASE+0x1fff},{BASE+0x410,BASE+0x1802},

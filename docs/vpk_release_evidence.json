@@ -1,11 +1,11 @@
 {
   "loader_objects_compiled": {
     "passed": true,
-    "evidence": "docs/BUILD_EVIDENCE_2026-10-29.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
+    "evidence": "docs/BUILD_EVIDENCE_2026-10-30.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
   },
   "loader_elf_linked": {
     "passed": true,
-    "evidence": "docs/BUILD_EVIDENCE_2026-10-29.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
+    "evidence": "docs/BUILD_EVIDENCE_2026-10-30.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
   },
   "all_original_imports_bound": {
     "passed": false,

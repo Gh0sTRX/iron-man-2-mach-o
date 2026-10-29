@@ -666,16 +666,33 @@ int macho_load(const char *bin_path, const char *rebase_path) {
             l_error("Objective-C categories not yet supported");return -1;
         }
     }
+    size_t class_checkpoint=im2_objc_registration_checkpoint();
+    int classes_ok=1;
+    char class_error[160]={0};
     for(int i=0;i<nsects_total;i++) {
         const section *sec=sects[i];
         if(!im2_macho_name_equal(sec->sectname,"__objc_classlist")) continue;
         if(sec->size%4u || sec->addr<data_vm ||
-           (uint64_t)sec->addr+sec->size>(uint64_t)data_vm+data_size) return -1;
-        char error[160];
-        if(im2_objc_register_guest_list(macho_slide+sec->addr,sec->size/4u,
-            read_guest_metadata,NULL,error,sizeof(error))) {
-            l_error("Guest Objective-C class registration failed: %s",error);return -1;
+           (uint64_t)sec->addr+sec->size>(uint64_t)data_vm+data_size) {
+            snprintf(class_error,sizeof(class_error),"invalid guest class-list section");classes_ok=0;break;
         }
+        if(im2_objc_register_guest_list(macho_slide+sec->addr,sec->size/4u,
+            read_guest_metadata,NULL,class_error,sizeof(class_error))) {classes_ok=0;break;}
+    }
+    // References can only be type-checked after local class identities are known.
+    // A nonzero data/code pointer must never pass as a class/metaclass binding.
+    if(classes_ok) for(int i=0;i<nsects_total;i++) {
+        const section *sec=sects[i];
+        if(!im2_macho_name_equal(sec->sectname,"__objc_classrefs") &&
+           !im2_macho_name_equal(sec->sectname,"__objc_superrefs")) continue;
+        if(im2_objc_validate_guest_refs(macho_slide+sec->addr,sec->size/4u,
+            read_guest_metadata,NULL,class_error,sizeof(class_error))) {classes_ok=0;break;}
+    }
+    if(!classes_ok) {
+        if(im2_objc_registration_rollback(class_checkpoint))
+            l_error("Guest class registry rollback failed");
+        l_error("Guest Objective-C class/reference validation failed: %s",class_error);
+        return -1;
     }
 
     // Copy final __TEXT to executable memory block

@@ -119,3 +119,27 @@ bad:
     if(classes)for(size_t i=0;i<count;i++){free(classes[i].name);free_methods(classes[i].instance_methods,classes[i].ni);free_methods(classes[i].class_methods,classes[i].nc);}
     free(classes);if(error && error_size)snprintf(error,error_size,"%s",why);return -1;
 }
+
+int im2_objc_validate_guest_refs(uint32_t list,size_t count,Im2GuestRead read,void *ctx,
+    char *error,size_t error_size) {
+    const char *why=NULL;
+    if(!read || count>1000000 || list%4 || (uint64_t)list+4ull*count>UINT32_MAX) {
+        why="invalid Objective-C reference section";goto bad;
+    }
+    const uint8_t *refs=count?read(ctx,list,4*count,0):NULL;
+    if(count && !refs) {why="Objective-C references outside mapped image";goto bad;}
+    for(size_t i=0;i<count;i++) {
+        uint32_t identity=word(refs+4*i);
+        if(!identity || !im2_objc_is_class((const void *)(uintptr_t)identity)) {
+            if(error && error_size)snprintf(error,error_size,
+                "unregistered Objective-C class reference at 0x%08x: 0x%08x",
+                (unsigned)(list+4*i),(unsigned)identity);
+            return -1;
+        }
+    }
+    if(error && error_size)error[0]=0;
+    return 0;
+bad:
+    if(error && error_size)snprintf(error,error_size,"%s",why);
+    return -1;
+}

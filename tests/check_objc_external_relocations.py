@@ -13,6 +13,8 @@ checks={
  "32-bit vanilla relocation only":"(bits&0x06000000u)!=0x04000000u" in (root/"vendor/ios-loader-boilerplate/source/macho_reloc.c").read_text(),
  "nil classref rejected":'Unbound ObjC class reference' in s,
  "classrefs section scanned":'"__objc_classrefs"' in s and '"__objc_superrefs"' in s,
+ "registered class identities validated": "im2_objc_validate_guest_refs(" in s,
+ "failed class groups rolled back": "im2_objc_registration_rollback(class_checkpoint)" in s,
  "no generic class stub":'make_unimpl_data(name)' not in s,
 }
 for k,v in checks.items():print(("PASS" if v else "FAIL"),k)
