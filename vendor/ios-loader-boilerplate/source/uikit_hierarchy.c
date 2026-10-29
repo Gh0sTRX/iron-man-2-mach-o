@@ -17,7 +17,7 @@ typedef struct UiState {
     void *owner;
     Im2Rect32 frame;
     void *controller_view;
-    int hidden,tag;
+    int hidden,tag,frame_valid;
     struct UiState *next;
 } UiState;
 
@@ -70,13 +70,19 @@ static uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame
     (void)selector;
     if(!kind_of(self,view))fail("initWithFrame: receiver is not UIView");
     UiState *s=state_for(self,1);
-    s->frame=frame;
+    s->frame=frame;s->frame_valid=1;
     return (uintptr_t)self;
 }
 static void view_set_frame(void *self,const char *selector,Im2Rect32 frame) {
     (void)selector;
     if(!kind_of(self,view))fail("setFrame: receiver is not UIView");
-    state_for(self,1)->frame=frame;
+    UiState *s=state_for(self,1);s->frame=frame;s->frame_valid=1;
+}
+int im2_uikit_view_frame(const void *receiver,Im2Rect32 *out) {
+    if(!out || !kind_of(receiver,view))return -1;
+    UiState *s=state_for((void *)receiver,0);
+    if(!s || !s->frame_valid)return -1;
+    *out=s->frame;return 0;
 }
 static void view_set_hidden(void *self,const char *selector,int hidden) {
     (void)selector;
