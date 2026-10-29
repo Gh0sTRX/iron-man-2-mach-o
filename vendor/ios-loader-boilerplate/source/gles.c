@@ -279,6 +279,9 @@ void gles_present(void) {
 #define D(name) {"_" #name, (uintptr_t)(name)}
 
 const import_entry gles_imports[] = {
+    // Integer/pointer-only GLES1 calls share the ARM register ABI.
+    // Floating-point calls require explicit iOS SoftFP bridges; do not map directly.
+    D(glColorMask), D(glCullFace), D(glDepthFunc), D(glFrontFace), D(glPixelStorei),
     D(glActiveTexture), D(glBindTexture), D(glBlendFunc), D(glClear), D(glCopyTexImage2D),
     D(glCopyTexSubImage2D), D(glDeleteTextures), D(glDepthMask), D(glDisable), D(glDisableClientState),
     D(glEnable), D(glEnableClientState), D(glGenTextures), D(glGetIntegerv), D(glIsEnabled),
