@@ -1,5 +1,5 @@
 {
-  "note": "Original counts from original Mach-O audit. Native NSURL implements strict parsing/file URL conversion but not networking, full RFC resolution or device behavior; class binding is not equivalent to complete Apple framework support.",
+  "note": "Original class counts from owner Mach-O audit; native NSURL, NSURLRequest and NSMutableURLRequest are explicitly partial (no network execution, redirects or verified iOS binary ABI). A class name binding is not Apple framework compatibility.",
   "classes": [
     {
       "name": "NSString",
@@ -137,7 +137,7 @@
     {
       "name": "NSURLRequest",
       "source_classref_slots": 4,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
@@ -200,7 +200,7 @@
     {
       "name": "NSMutableURLRequest",
       "source_classref_slots": 2,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
