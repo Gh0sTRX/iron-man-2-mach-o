@@ -87,6 +87,8 @@ static int unimpl_count;
 extern void ml_unimpl_entry(void);
 extern void ml_align_call(void);
 
+uint32_t macho_get_runtime_slide(void) { return macho_slide; }
+
 void ml_unimpl_log(int idx) {
     static uint8_t seen[4096];
     if (idx < (int)sizeof(seen) && seen[idx] < 3) {
@@ -242,6 +244,10 @@ static int apply_rebase(const char *rebase_path) {
 }
 
 int macho_load(const char *bin_path, const char *rebase_path) {
+    guest_exec_ready = 0;
+    macho_slide = 0;
+    mod_init_addr = 0;
+    mod_init_count = 0;
     l_info("Loading Mach-O executable: %s", bin_path);
     FILE *f = fopen(bin_path, "rb");
     if (!f)
@@ -423,14 +429,20 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     // Executable thunk arena
     SceUID thunk_blk = sceKernelAllocMemBlockForVM("macho_thunks", THUNK_ARENA_SIZE);
     void *thunk_ptr = NULL;
-    if (thunk_blk >= 0) {
-        sceKernelGetMemBlockBase(thunk_blk, &thunk_ptr);
-        thunk_head = (uint32_t *)thunk_ptr;
-        thunk_end = thunk_head + (THUNK_ARENA_SIZE / 4);
+    if (thunk_blk < 0 ||
+        sceKernelGetMemBlockBase(thunk_blk, &thunk_ptr) < 0 || !thunk_ptr) {
+        l_error("Cannot allocate executable import thunk arena");
+        return -1;
     }
+    thunk_head = (uint32_t *)thunk_ptr;
+    thunk_end = thunk_head + (THUNK_ARENA_SIZE / 4);
 
     // Copy segment contents
     text_buf = malloc(text_size);
+    if (!text_buf) {
+        l_error("Cannot allocate temporary Mach-O __TEXT buffer");
+        return -1;
+    }
     memset(text_buf, 0, text_size);
     memcpy(text_buf, d + seg_text->fileoff, seg_text->filesize);
 
@@ -441,6 +453,9 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     for (int i = 0; i < nsects_total; i++) {
         section *s = sects[i];
         if (!strcmp(s->sectname, "__mod_init_func")) {
+            if ((s->size & 3u) || s->addr < data_vm ||
+                (uint64_t)s->addr + s->size > (uint64_t)data_vm + data_size)
+                return -1;
             mod_init_addr = macho_slide + s->addr;
             mod_init_count = s->size / 4;
         }
@@ -533,6 +548,12 @@ void macho_run_inits(void) {
     for (uint32_t i = 0; i < mod_init_count; i++) {
         if (funcs[i]) {
             uintptr_t fn = funcs[i];
+            uintptr_t arm_pc = fn & ~(uintptr_t)1u;
+            if (arm_pc < text_real || arm_pc >= text_real + text_size) {
+                l_error("Constructor %u points outside mapped __TEXT: 0x%08X",
+                        (unsigned)i, (unsigned)fn);
+                return;
+            }
             call_guest((void *)fn, 0, 0, 0, 0);
         }
     }
