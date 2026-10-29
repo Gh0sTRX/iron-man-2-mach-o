@@ -22,7 +22,7 @@ int macho_load(const char *bin_path, const char *rebase_path);
 /**
  * @brief Executes static C/C++ global constructors (__mod_init_func section).
  */
-void macho_run_inits(void);
+int macho_run_inits(void);
 
 /**
  * @brief Resolves the runtime memory address of a guest Mach-O symbol.
@@ -47,3 +47,6 @@ uint32_t call_guest(void *fn, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3
  * @brief Invokes a 6-argument guest function preserving r9 register.
  */
 uint32_t call_guest6(void *fn, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5);
+
+/* Code-section bounded entry lookup, distinct from general data symbol lookup. */
+uintptr_t macho_entry(const char *name);

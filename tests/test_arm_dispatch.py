@@ -17,10 +17,16 @@ code=Path(a.binary).read_bytes()
 BASE=0x10000;STACK=0x30000;STOP=0x50000;SELF=0x60000;SEL=0x60100;RESULT=0x60200
 checks=0
 for misalignment in (0,4):
-    for mode in ('word','stret','nil','nil_stret','arm_guest','thumb_guest','guest6'):
+    for mode in ('word','stret','nil','nil_stret','arm_guest','thumb_guest','guest6','guest_word','guest_stret','super_word','super_guest_word','super_stret','super_guest_stret'):
         uc=Uc(UC_ARCH_ARM,UC_MODE_ARM)
         uc.mem_map(BASE,0x10000);uc.mem_write(BASE,code)
         uc.mem_map(STACK,0x10000);uc.mem_map(STOP,0x1000);uc.mem_map(SELF,0x1000)
+        is_super=mode.startswith('super_')
+        is_stret='stret' in mode
+        is_direct_guest='guest' in mode and mode not in ('arm_guest','thumb_guest','guest6')
+        frame=0x60300
+        uc.mem_write(frame,struct.pack('<2I',SELF,0x60400))
+        uc.mem_write(0x601f0,struct.pack('<I',0 if is_direct_guest else 1))
         sp=STACK+0x8000+misalignment
         uc.reg_write(UC_ARM_REG_SP,sp);uc.reg_write(UC_ARM_REG_LR,STOP)
         uc.reg_write(UC_ARM_REG_R9,0x12345678)
@@ -31,12 +37,15 @@ for misalignment in (0,4):
         uc.reg_write(UC_ARM_REG_R0,SELF);uc.reg_write(UC_ARM_REG_R1,SEL)
         uc.reg_write(UC_ARM_REG_R2,10);uc.reg_write(UC_ARM_REG_R3,20)
         entry='im2_objc_msgSend_entry'
-        if mode in ('stret','nil_stret'):
+        if is_stret:
             entry='im2_objc_msgSend_stret_entry'
             uc.reg_write(UC_ARM_REG_R0,RESULT);uc.reg_write(UC_ARM_REG_R1,SELF);uc.reg_write(UC_ARM_REG_R2,SEL)
+        if is_super:
+            entry='im2_objc_msgSendSuper2_stret_entry' if is_stret else 'im2_objc_msgSendSuper2_entry'
+            uc.reg_write(UC_ARM_REG_R1 if is_stret else UC_ARM_REG_R0,frame)
         if mode=='nil':uc.reg_write(UC_ARM_REG_R0,0)
         if mode=='nil_stret':uc.reg_write(UC_ARM_REG_R1,0)
-        if mode.endswith('guest') or mode=='guest6':
+        if mode in ('arm_guest','thumb_guest','guest6'):
             # Host entry must be AAPCS-aligned, regardless of guest tests above.
             if misalignment:continue
             entry='call_guest6' if mode=='guest6' else 'call_guest'
@@ -48,9 +57,10 @@ for misalignment in (0,4):
         def hook(uc,addr,size,data):
             if addr in (symbols['test_word_imp'],symbols['test_struct_imp']):
                 native_calls.append(addr)
-                assert uc.reg_read(UC_ARM_REG_SP)%8==0
+                assert uc.reg_read(UC_ARM_REG_SP)%8==(misalignment if is_direct_guest else 0)
+                if is_direct_guest:assert uc.reg_read(UC_ARM_REG_SP)==sp
                 # r0-r3 and guest stack words reach the selected IMP untouched.
-                if mode=='word':
+                if not is_stret:
                     assert [uc.reg_read(r) for r in (UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3)]==[SELF,SEL,10,20]
                 else:
                     assert [uc.reg_read(r) for r in (UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3)]==[RESULT,SELF,SEL,20]
@@ -61,8 +71,8 @@ for misalignment in (0,4):
         assert uc.reg_read(UC_ARM_REG_SP)==sp
         assert uc.reg_read(UC_ARM_REG_R9)==0x12345678
         for reg,value in preserved.items():assert uc.reg_read(reg)==value
-        if mode=='word':assert uc.reg_read(UC_ARM_REG_R0)==60
-        if mode=='stret':assert bytes(uc.mem_read(RESULT,8))==struct.pack('<2I',20,30)
+        if not is_stret and mode not in ('nil','arm_guest','thumb_guest','guest6'):assert uc.reg_read(UC_ARM_REG_R0)==60
+        if is_stret and mode!='nil_stret':assert bytes(uc.mem_read(RESULT,8))==struct.pack('<2I',20,30)
         if mode in ('nil','nil_stret'):assert not native_calls
         if mode=='nil':assert uc.reg_read(UC_ARM_REG_R0)==0 and uc.reg_read(UC_ARM_REG_R1)==0
         if mode=='arm_guest':assert uc.reg_read(UC_ARM_REG_R0)==10

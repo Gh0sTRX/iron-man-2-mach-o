@@ -8,10 +8,12 @@
 /**
  * @brief Represents a single imported symbol binding.
  */
+enum { IM2_IMPORT_FUNCTION=0, IM2_IMPORT_DATA=1, IM2_IMPORT_ABI_ENTRY=2 };
+
 typedef struct {
     const char *name; /**< Mach-O symbol name (including leading '_' if present). */
     uintptr_t addr;   /**< Destination function address or data pointer. */
-    int data;         /**< 1 = variable/data (direct link); 0 = function (dispatched via ml_align_call). */
+    int data;         /**< 0 = bridged function, 1 = data, 2 = assembly entry that owns its ABI boundary. */
 } import_entry;
 
 /**
@@ -45,3 +47,5 @@ extern const int patch_imports_count;
 #define F(name, fn)    {"_" #name, (uintptr_t)(fn), 0}
 #define F_RAW(name, fn){name, (uintptr_t)(fn), 0}
 #define D(name, addr)  {"_" #name, (uintptr_t)(addr), 1}
+
+#define F_ABI(name, fn) {"_" #name, (uintptr_t)(fn), IM2_IMPORT_ABI_ENTRY}

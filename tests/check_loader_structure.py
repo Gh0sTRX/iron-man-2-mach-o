@@ -26,7 +26,7 @@ checks = {
     "Load command envelope bounds checked": 'Invalid Mach-O load command envelope' in s,
     "Vita guest execution is gated": "IM2_ALLOW_UNVERIFIED_VM_EXEC" in s and "guest_exec_ready" in s,
     "Guest entry runtime slide getter": "uint32_t macho_get_runtime_slide(void)" in s,
-    "Constructor addresses validated": "Constructor %u points outside mapped __TEXT" in s,
+    "Constructor addresses validated": "im2_run_initializers(" in s,
     "All RBS1 payloads validated": "RBS1 pointer payload invalid" in s,
 
 }

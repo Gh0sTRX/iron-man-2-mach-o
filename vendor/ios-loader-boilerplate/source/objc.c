@@ -407,9 +407,26 @@ static void string_message_stret(float *ret, void *self, const char *sel, ...) {
     va_end(ap);
 }
 
-// Explicit class-specific runtime. UIKit and guest-defined classes remain unsupported.
+// Class-specific dispatch for explicit native classes and validated guest metadata.
+// UIKit behavior and aggregate guest-return ABIs remain incomplete.
+static void object_destroy(void *self) {
+    Im2ObjcTarget target;
+    if(im2_objc_lookup_target(self,"dealloc",NULL,&target) || target.stret_size)
+        fatal_error("Unsupported Objective-C dealloc implementation");
+    const char *sel=im2_objc_sel_register("dealloc");
+    if(target.guest) call_guest((void *)target.imp,(uint32_t)self,(uint32_t)sel,0,0);
+    else ((void (*)(void *,const char *))target.imp)(self,sel);
+}
 static void *object_alloc(Im2ObjcClass *self,const char *sel) {
-    (void)sel; return im2_objc_alloc(self,self==string_class?ns_destroy:NULL);
+    (void)sel; return im2_objc_alloc(self,object_destroy);
+}
+static void object_dealloc(void *self,const char *sel) {
+    (void)sel;
+    /* The outer release owns storage disposal after the dealloc chain returns. */
+    if(im2_objc_retain_count(self)!=0) fatal_error("Direct dealloc outside final release is unsupported");
+}
+static void string_dealloc(void *self,const char *sel) {
+    object_dealloc(self,sel);ns_destroy(self);((ns_string *)self)->str=NULL;
 }
 static void *object_init(void *self,const char *sel) { (void)sel; return self; }
 static void *object_retain(void *self,const char *sel) { (void)sel; return im2_objc_retain(self); }
@@ -432,16 +449,26 @@ static void *pool_init(void *self,const char *sel) {
 }
 static void *im2_get_class(const char *name) { return im2_objc_class_named(name); }
 static void *im2_get_metaclass(const char *name) {
-    Im2ObjcClass *c=im2_objc_class_named(name);return c?c->isa:NULL;
+    const Im2ObjcClass *c=im2_objc_class_metadata(im2_objc_class_named(name));return c?c->isa:NULL;
 }
 static const char *im2_selector_name(const char *name) {return name;}
 extern void im2_objc_msgSend_entry(void),im2_objc_msgSend_stret_entry(void);
-uintptr_t im2_objc_lookup_imp(void *self,const char *selector,uint32_t stret) {
-    size_t result_size=0;
-    Im2Imp imp=im2_objc_lookup(self,selector,&result_size);
-    if(!imp || !!stret != !!result_size)
+extern void im2_objc_msgSendSuper2_entry(void),im2_objc_msgSendSuper2_stret_entry(void);
+static uint64_t lookup_target_words(void *self,const char *selector,uint32_t stret,const void *current) {
+    Im2ObjcTarget target;
+    if(im2_objc_lookup_target(self,selector,current,&target) || target.stret_size==SIZE_MAX ||
+       !!stret != !!target.stret_size)
         fatal_error("Unsupported ObjC receiver/selector/return ABI: %p %s stret=%u",self,selector?selector:"(null)",(unsigned)stret);
-    return (uintptr_t)imp;
+    /* AAPCS uint64_t return: r0=IMP, r1=host flag. Guest IMPs keep Darwin SP/registers. */
+    return (uint32_t)(uintptr_t)target.imp | ((uint64_t)!target.guest<<32);
+}
+uint64_t im2_objc_lookup_words(void *self,const char *selector,uint32_t stret) {
+    return lookup_target_words(self,selector,stret,NULL);
+}
+uint64_t im2_objc_lookup_super_words(const void *frame,const char *selector,uint32_t stret) {
+    if(!frame) fatal_error("Null objc_super2 frame");
+    void *const *words=frame;
+    return lookup_target_words(words[0],selector,stret,words[1]);
 }
 #define METHOD(sel,types,imp) {sel,types,(Im2Imp)(imp),0}
 void objc_init(void) {
@@ -449,15 +476,17 @@ void objc_init(void) {
     const Im2MethodSpec root_instance[]={
         METHOD("init","@@:",object_init),METHOD("retain","@@:",object_retain),
         METHOD("release","v@:",object_release),METHOD("autorelease","@@:",object_autorelease),
-        METHOD("class","#@:",object_class),METHOD("respondsToSelector:","c@::",object_responds)};
+        METHOD("class","#@:",object_class),METHOD("respondsToSelector:","c@::",object_responds),
+        METHOD("dealloc","v@:",object_dealloc)};
     const Im2MethodSpec root_class[]={METHOD("alloc","@@:",object_alloc),METHOD("class","#@:",class_class)};
     Im2ObjcClass *root=im2_objc_register_class("NSObject",NULL,sizeof(Im2ObjcObject),
-        root_instance,6,root_class,2);
+        root_instance,7,root_class,2);
     const Im2MethodSpec strings[]={METHOD("UTF8String","*@:",string_message),
-        METHOD("length","I@:",string_message),METHOD("getCString:maxLength:encoding:","c@:*II",string_message)};
+        METHOD("length","I@:",string_message),METHOD("getCString:maxLength:encoding:","c@:*II",string_message),
+        METHOD("dealloc","v@:",string_dealloc)};
     const Im2MethodSpec string_factory[]={METHOD("stringWithUTF8String:","@@:*",string_message),
         METHOD("stringWithFormat:","@@:@",string_message)};
-    string_class=im2_objc_register_class("NSString",root,sizeof(ns_string),strings,3,string_factory,2);
+    string_class=im2_objc_register_class("NSString",root,sizeof(ns_string),strings,4,string_factory,2);
     const Im2MethodSpec pool_methods[]={METHOD("init","@@:",pool_init),METHOD("drain","v@:",object_release)};
     pool_class=im2_objc_register_class("NSAutoreleasePool",root,sizeof(Im2ObjcObject),pool_methods,2,NULL,0);
     if(!root || !string_class || !pool_class) fatal_error("ObjC class registry initialization failed");
@@ -482,7 +511,9 @@ const import_entry *objc_class_import(const char *name) {
 #define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
 
 const import_entry objc_imports[] = {
-    F(objc_msgSend, im2_objc_msgSend_entry), F(objc_msgSend_stret, im2_objc_msgSend_stret_entry),
+    F_ABI(objc_msgSend, im2_objc_msgSend_entry), F_ABI(objc_msgSend_stret, im2_objc_msgSend_stret_entry),
+    F_ABI(objc_msgSendSuper2, im2_objc_msgSendSuper2_entry),
+    F_ABI(objc_msgSendSuper2_stret, im2_objc_msgSendSuper2_stret_entry),
     F(objc_getClass, im2_get_class), F(objc_getMetaClass, im2_get_metaclass),
     F(sel_registerName, im2_objc_sel_register), F(sel_getName, im2_selector_name),
     F(CGBitmapContextCreate, cg_BitmapContextCreate), F(CGContextRelease, cg_ContextRelease),

@@ -13,3 +13,16 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -I vendor/ios-loader-boilerplate/source tests/test_external_reloc.c \
   vendor/ios-loader-boilerplate/source/macho_reloc.c -o build/host-runtime/test_external_reloc
 build/host-runtime/test_external_reloc
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I vendor/ios-loader-boilerplate/source tests/test_initializers.c \
+  vendor/ios-loader-boilerplate/source/macho_init.c -o build/host-runtime/test_initializers
+build/host-runtime/test_initializers
+
+# The non-PIE host test gives static host class identities 32-bit-representable values;
+# guest metadata itself is still read with explicit ARM32 word layouts.
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -no-pie -pthread -I vendor/ios-loader-boilerplate/source tests/test_objc_guest.c \
+  vendor/ios-loader-boilerplate/source/objc_guest.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_objc_guest
+build/host-runtime/test_objc_guest

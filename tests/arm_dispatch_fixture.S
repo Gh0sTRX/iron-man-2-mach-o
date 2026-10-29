@@ -4,11 +4,15 @@
 .text
 .global ml_unimpl_log
 ml_unimpl_log: bx lr
-.global im2_objc_lookup_imp
-im2_objc_lookup_imp:
+.global im2_objc_lookup_words
+.global im2_objc_lookup_super_words
+im2_objc_lookup_words:
+im2_objc_lookup_super_words:
     cmp r2, #0
     ldreq r0, =test_word_imp
     ldrne r0, =test_struct_imp
+    ldr ip, =0x601f0
+    ldr r1, [ip]
     bx lr
 .global test_word_imp
 .type test_word_imp,%function

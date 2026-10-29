@@ -90,11 +90,13 @@ im2_objc_msgSend_entry:
     mov r4, sp
     bic sp, sp, #7
     mov r2, #0
-    bl im2_objc_lookup_imp
+    bl im2_objc_lookup_words
     mov sp, r4
     mov ip, r0
+    cmp r1, #0
     pop {r0-r3, r4, lr}
-    b ml_align_call
+    bne ml_align_call
+    bx ip
     .global im2_objc_msgSend_stret_entry
     .type im2_objc_msgSend_stret_entry, %function
 im2_objc_msgSend_stret_entry:
@@ -106,8 +108,44 @@ im2_objc_msgSend_stret_entry:
     mov r0, r1
     mov r1, r2
     mov r2, #1
-    bl im2_objc_lookup_imp
+    bl im2_objc_lookup_words
     mov sp, r4
     mov ip, r0
+    cmp r1, #0
     pop {r0-r3, r4, lr}
-    b ml_align_call
+    bne ml_align_call
+    bx ip
+
+@ objc_super2 { receiver, current implementation class }; IMP receives receiver.
+    .global im2_objc_msgSendSuper2_entry
+    .type im2_objc_msgSendSuper2_entry, %function
+im2_objc_msgSendSuper2_entry:
+    push {r0-r3, r4, lr}
+    mov r4, sp
+    bic sp, sp, #7
+    mov r2, #0
+    bl im2_objc_lookup_super_words
+    mov sp, r4
+    mov ip, r0
+    cmp r1, #0
+    pop {r0-r3, r4, lr}
+    ldr r0, [r0]
+    bne ml_align_call
+    bx ip
+    .global im2_objc_msgSendSuper2_stret_entry
+    .type im2_objc_msgSendSuper2_stret_entry, %function
+im2_objc_msgSendSuper2_stret_entry:
+    push {r0-r3, r4, lr}
+    mov r4, sp
+    bic sp, sp, #7
+    mov r0, r1
+    mov r1, r2
+    mov r2, #1
+    bl im2_objc_lookup_super_words
+    mov sp, r4
+    mov ip, r0
+    cmp r1, #0
+    pop {r0-r3, r4, lr}
+    ldr r1, [r1]
+    bne ml_align_call
+    bx ip

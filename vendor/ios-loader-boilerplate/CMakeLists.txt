@@ -25,10 +25,12 @@ add_library(im2_ios_loader_objects OBJECT
   source/darwin_printf.c
   source/macho.c
   source/macho_reloc.c
+  source/macho_init.c
   source/imports.c
   source/darwin.c
   source/objc.c
   source/objc_runtime.c
+  source/objc_guest.c
   source/gles.c
   source/coreaudio.c
   source/input.c

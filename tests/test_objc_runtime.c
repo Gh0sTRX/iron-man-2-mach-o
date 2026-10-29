@@ -5,8 +5,16 @@
 #include <stdint.h>
 #include <stdio.h>
 static int destroyed;
+static int checked_dealloc;
 static void destroy(void *p) { (void)p; __sync_fetch_and_add(&destroyed,1); }
 static void root_method(void) {}
+static void dealloc_check(void *p) {
+    assert(im2_objc_retain_count(p)==0);
+    assert(im2_objc_lookup(p,"instance",NULL)==root_method);
+    assert(!im2_objc_retain(p));
+    assert(im2_objc_release(p)==-1);
+    checked_dealloc++;
+}
 static void child_method(void) {}
 static void class_method(void) {}
 static void struct_method(void) {}
@@ -67,5 +75,7 @@ int main(void) {
     assert(!im2_objc_pool_drain(outer));assert(destroyed==402);
     assert(!im2_objc_retain_count(object));
     assert(!im2_objc_release(root));assert(im2_objc_retain(root)==root);
+    void *dying=im2_objc_alloc(child,dealloc_check);
+    assert(!im2_objc_release(dying) && checked_dealloc==1);
     puts("PASS: class/metaclass layout, selectors, inherited/class/stret lookup, ownership, nested and thread-local pools");
 }

@@ -15,6 +15,7 @@ const import_entry darwin_imports[] = {
     F(malloc, malloc),
     D(glBindTexture),
     V(__stderrp, &stderr_ptr),
+    F_ABI(objc_msgSend, assembly_entry),
     {"_OBJC_CLASS_$_SomeClass", (uintptr_t)&some_class, 1},
     // F(not_an_import, NULL)
     /* F(also_not_an_import, NULL) */
@@ -27,7 +28,8 @@ const import_entry darwin_imports[] = {
     assert "_OBJC_CLASS_$_SomeClass" in have
     assert "_not_an_import" not in have
     assert "_also_not_an_import" not in have
-    assert len(have)==4,have
+    assert "_objc_msgSend" in have
+    assert len(have)==5,have
     expected=src/"original.json"
     expected.write_text('{"dynamic_imports":["_malloc","_glBindTexture","_missing"]}')
     requested=audit.original_names(expected)

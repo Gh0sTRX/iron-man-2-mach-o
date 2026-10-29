@@ -102,34 +102,16 @@ int main(int argc, char *argv[]) {
     // Initialize game-specific hooks and memory patches
     patch_init();
 
-    // Execute C/C++ static constructors (__mod_init_func)
-    macho_run_inits();
-
-    // Locate entry point
-    uintptr_t entry = macho_sym("_main");
-    if (!entry)
-        entry = macho_sym("_SDL_main");
-    if (!entry)
-        entry = macho_sym("_startClet");
-
-    if (entry) {
-        l_info("Jumping to guest entry point at 0x%08X (Mach-O offset 0x%08X)",
-               (unsigned)entry, (unsigned)(entry - macho_get_runtime_slide()));
-        static char arg0[]=BUNDLE_PATH "IronMan2";
-        static char *guest_argv[]={arg0,NULL};
-        call_guest((void *)entry, 1, (uint32_t)guest_argv, 0, 0);
-    } else {
-        l_warn("Neither '_main' nor '_startClet' found; entering default event loop...");
-    }
-
-    // Main fallback event loop if game relies on timers or callbacks
-    for (;;) {
-        input_poll();
-        ime_poll();
-        patch_frame();
-        gles_present();
-        sceKernelDelayThread(16000); // ~60 fps
-    }
-
-    return 0;
+    // Resolve a main-compatible entry before constructors can have side effects.
+    uintptr_t entry=macho_entry("_main");
+    if(!entry) entry=macho_entry("_SDL_main");
+    if(!entry) fatal_error("No supported guest _main entry; startup stopped");
+    if(macho_run_inits()!=0) fatal_error("Guest constructor validation failed; main was not called");
+    l_info("Jumping to guest main at 0x%08X (Mach-O offset 0x%08X)",
+           (unsigned)entry,(unsigned)(entry-macho_get_runtime_slide()));
+    static char arg0[]=BUNDLE_PATH "IronMan2";
+    static char *guest_argv[]={arg0,NULL};
+    int result=(int)call_guest((void *)entry,1,(uint32_t)guest_argv,0,0);
+    l_info("Guest main returned %d",result);
+    return result;
 }

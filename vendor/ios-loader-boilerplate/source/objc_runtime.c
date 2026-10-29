@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#define CLASS_LIMIT 64
+#define CLASS_LIMIT 128
 #define METHOD_LIMIT 64
 #define SELECTOR_LIMIT 2048
 #define RW_REALIZED (1u<<31)
@@ -11,6 +11,8 @@ typedef struct { const char *name,*types; Im2Imp imp; } Method;
 typedef struct { uint32_t stride,count; Method methods[METHOD_LIMIT]; } MethodList;
 typedef struct {
     Im2ObjcClass cls,meta;
+    const void *identity,*meta_identity;
+    int guest;
     Im2ClassRO ro,meta_ro;
     Im2ClassRW rw,meta_rw;
     MethodList instance_methods,class_methods;
@@ -46,14 +48,23 @@ const char *im2_objc_sel_register(const char *s) {
     if(p) selectors[selector_count++]=p;
     pthread_mutex_unlock(&lock); return p;
 }
-Im2ObjcClass *im2_objc_class_named(const char *s) {
-    if(!s) return NULL;
-    for(size_t i=0;i<class_count;i++) if(!strcmp(classes[i].ro.name,s)) return &classes[i].cls;
+const Im2ObjcClass *im2_objc_class_metadata(const void *identity) {
+    for(size_t i=0;i<class_count;i++) {
+        if(identity==classes[i].identity) return &classes[i].cls;
+        if(identity==classes[i].meta_identity) return &classes[i].meta;
+    }
     return NULL;
 }
-int im2_objc_is_class(const void *p) {
-    for(size_t i=0;i<class_count;i++) if(p==&classes[i].cls || p==&classes[i].meta) return 1;
-    return 0;
+Im2ObjcClass *im2_objc_class_named(const char *s) {
+    if(!s) return NULL;
+    for(size_t i=0;i<class_count;i++) if(!strcmp(classes[i].ro.name,s)) return (Im2ObjcClass *)classes[i].identity;
+    return NULL;
+}
+int im2_objc_is_class(const void *p) {return im2_objc_class_metadata(p)!=NULL;}
+static void free_entry(ClassEntry *e) {
+    for(size_t j=0;j<e->instance_methods.count;j++) free((void *)e->instance_methods.methods[j].types);
+    for(size_t j=0;j<e->class_methods.count;j++) free((void *)e->class_methods.methods[j].types);
+    free((void *)e->ro.name);memset(e,0,sizeof(*e));
 }
 static int fill_methods(MethodList *dst,size_t *sizes,const Im2MethodSpec *spec,size_t n) {
     dst->stride=sizeof(Method); dst->count=(uint32_t)n;
@@ -62,7 +73,8 @@ static int fill_methods(MethodList *dst,size_t *sizes,const Im2MethodSpec *spec,
         const char *sel=im2_objc_sel_register(spec[i].selector);
         if(!sel) return -1;
         for(size_t j=0;j<i;j++) if(dst->methods[j].name==sel) return -1;
-        dst->methods[i]=(Method){sel,spec[i].types,spec[i].imp}; sizes[i]=spec[i].stret_size;
+        char *types=copy_string(spec[i].types);if(!types) return -1;
+        dst->methods[i]=(Method){sel,types,spec[i].imp}; sizes[i]=spec[i].stret_size;
     }
     return 0;
 }
@@ -71,16 +83,17 @@ Im2ObjcClass *im2_objc_register_class(const char *name,Im2ObjcClass *super,size_
     if(!name || !*name || size<sizeof(Im2ObjcObject) || size>UINT32_MAX ||
        class_count==CLASS_LIMIT || ni>METHOD_LIMIT || nc>METHOD_LIMIT ||
        (ni && !ims) || (nc && !cms) || im2_objc_class_named(name) ||
-       (super && (!im2_objc_is_class(super) || (super->data->ro->flags&1u) || size<super->data->ro->instance_size))) return NULL;
+       (super && (!im2_objc_is_class(super) || (im2_objc_class_metadata(super)->data->ro->flags&1u) || size<im2_objc_class_metadata(super)->data->ro->instance_size))) return NULL;
     /* A second root would need an explicit independent metaclass hierarchy. */
     if(!super && class_count) return NULL;
     ClassEntry *e=&classes[class_count]; memset(e,0,sizeof(*e));
     char *owned_name=copy_string(name); if(!owned_name) return NULL;
+    e->ro.name=owned_name;
     if(fill_methods(&e->instance_methods,e->instance_stret,ims,ni) ||
-       fill_methods(&e->class_methods,e->class_stret,cms,nc)) { free(owned_name); return NULL; }
+       fill_methods(&e->class_methods,e->class_stret,cms,nc)) { free_entry(e); return NULL; }
     e->ro.name=e->meta_ro.name=owned_name;
     e->ro.flags=super?0:2; e->meta_ro.flags=1|(super?0:2);
-    e->ro.instance_start=super?super->data->ro->instance_size:sizeof(void *);
+    e->ro.instance_start=super?im2_objc_class_metadata(super)->data->ro->instance_size:sizeof(void *);
     e->ro.instance_size=(uint32_t)size;
     e->meta_ro.instance_start=e->meta_ro.instance_size=sizeof(Im2ObjcClass);
     e->ro.methods=&e->instance_methods; e->meta_ro.methods=&e->class_methods;
@@ -90,42 +103,83 @@ Im2ObjcClass *im2_objc_register_class(const char *name,Im2ObjcClass *super,size_
     e->rw.methods=e->instance_lists; e->meta_rw.methods=e->class_lists;
     e->cls=(Im2ObjcClass){&e->meta,super,NULL,NULL,&e->rw};
     Im2ObjcClass *rootmeta=super?classes[0].cls.isa:&e->meta;
-    e->meta=(Im2ObjcClass){rootmeta,super?super->isa:&e->cls,NULL,NULL,&e->meta_rw};
-    if(super) {e->rw.next_sibling=super->data->first_subclass;super->data->first_subclass=&e->cls;}
+    e->meta=(Im2ObjcClass){rootmeta,super?im2_objc_class_metadata(super)->isa:&e->cls,NULL,NULL,&e->meta_rw};
+    e->identity=&e->cls;e->meta_identity=&e->meta;
+    if(super) {Im2ClassRW *rw=im2_objc_class_metadata(super)->data;e->rw.next_sibling=rw->first_subclass;rw->first_subclass=&e->cls;}
     class_count++; return &e->cls;
 }
 static Object *object_record(const void *p) {
     for(Object *o=objects;o;o=o->next) if(o->pointer==p) return o;
     return NULL;
 }
-Im2Imp im2_objc_lookup(const void *receiver,const char *selector,size_t *stret_size) {
-    if(stret_size) *stret_size=0;
-    if(!receiver || !selector) return NULL;
-    Im2ObjcClass *cls=NULL;
-    if(im2_objc_is_class(receiver)) cls=((const Im2ObjcClass *)receiver)->isa;
-    else {
-        pthread_mutex_lock(&lock); Object *o=object_record(receiver);
+int im2_objc_lookup_target(const void *receiver,const char *selector,
+    const void *current_class,Im2ObjcTarget *target) {
+    if(target) memset(target,0,sizeof(*target));
+    if(!receiver || !selector || !target) return -1;
+    const Im2ObjcClass *metadata=im2_objc_class_metadata(receiver);
+    Im2ObjcClass *cls=metadata?metadata->isa:NULL;
+    if(!metadata) {
+        pthread_mutex_lock(&lock);Object *o=object_record(receiver);
         if(o) cls=((const Im2ObjcObject *)receiver)->isa;
         pthread_mutex_unlock(&lock);
     }
-    /* Only registered host classes, never blindly dereference an arbitrary guest pointer. */
-    for(size_t depth=0;cls && depth<CLASS_LIMIT*2;depth++,cls=cls->superclass) {
-        ClassEntry *entry=NULL; MethodList *methods=NULL; size_t *sizes=NULL;
-        for(size_t i=0;i<class_count;i++) {
-            if(cls==&classes[i].cls) {entry=&classes[i];methods=&entry->instance_methods;sizes=entry->instance_stret;break;}
-            if(cls==&classes[i].meta) {entry=&classes[i];methods=&entry->class_methods;sizes=entry->class_stret;break;}
+    if(current_class) {
+        /* objc_msgSendSuper2 starts at the parent of the current implementation class,
+         * not the parent of the receiver's dynamic class. Reject unrelated classes. */
+        Im2ObjcClass *cursor=cls;int found=0;
+        for(size_t depth=0;cursor && depth<CLASS_LIMIT*2;depth++) {
+            const Im2ObjcClass *info=im2_objc_class_metadata(cursor);if(!info) return -1;
+            if(cursor==current_class) {cls=info->superclass;found=1;break;}
+            cursor=info->superclass;
         }
-        if(!entry) return NULL;
-        for(size_t i=0;i<methods->count;i++) if(!strcmp(selector,methods->methods[i].name)) {
-            if(stret_size) *stret_size=sizes[i];
-            return methods->methods[i].imp;
-        }
+        if(!found) return -1;
     }
-    return NULL;
+    for(size_t depth=0;cls && depth<CLASS_LIMIT*2;depth++) {
+        ClassEntry *entry=NULL;MethodList *methods=NULL;size_t *sizes=NULL;
+        for(size_t i=0;i<class_count;i++) {
+            if(cls==classes[i].identity) {entry=&classes[i];methods=&entry->instance_methods;sizes=entry->instance_stret;break;}
+            if(cls==classes[i].meta_identity) {entry=&classes[i];methods=&entry->class_methods;sizes=entry->class_stret;break;}
+        }
+        if(!entry) return -1;
+        for(size_t i=0;i<methods->count;i++) if(!strcmp(selector,methods->methods[i].name)) {
+            *target=(Im2ObjcTarget){methods->methods[i].imp,sizes[i],entry->guest};return 0;
+        }
+        cls=im2_objc_class_metadata(cls)->superclass;
+    }
+    return -1;
+}
+Im2Imp im2_objc_lookup(const void *receiver,const char *selector,size_t *size) {
+    Im2ObjcTarget target;int result=im2_objc_lookup_target(receiver,selector,NULL,&target);
+    if(size) *size=result?0:target.stret_size;
+    return result?NULL:target.imp;
+}
+static void rebuild_subclasses(void) {
+    for(size_t i=0;i<class_count;i++) {classes[i].rw.first_subclass=NULL;classes[i].rw.next_sibling=NULL;}
+    for(size_t i=0;i<class_count;i++) if(classes[i].cls.superclass) {
+        Im2ClassRW *parent=im2_objc_class_metadata(classes[i].cls.superclass)->data;
+        classes[i].rw.next_sibling=parent->first_subclass;parent->first_subclass=(Im2ObjcClass *)classes[i].identity;
+    }
+}
+Im2ObjcClass *im2_objc_register_foreign_class(const char *name,void *identity,void *meta,
+    Im2ObjcClass *super,size_t size,const Im2MethodSpec *im,size_t ni,const Im2MethodSpec *cm,size_t nc) {
+    if(!identity || !meta || identity==meta || im2_objc_is_class(identity) || im2_objc_is_class(meta) || !super) return NULL;
+    Im2ObjcClass *local=im2_objc_register_class(name,super,size,im,ni,cm,nc);if(!local) return NULL;
+    ClassEntry *e=&classes[class_count-1];e->identity=identity;e->meta_identity=meta;e->guest=1;
+    e->cls.isa=(Im2ObjcClass *)meta;rebuild_subclasses();return (Im2ObjcClass *)identity;
+}
+size_t im2_objc_registration_checkpoint(void) {return class_count;}
+int im2_objc_registration_rollback(size_t checkpoint) {
+    if(checkpoint>class_count) return -1;
+    pthread_mutex_lock(&lock);
+    for(Object *o=objects;o;o=o->next) for(size_t i=checkpoint;i<class_count;i++)
+        if(((const Im2ObjcObject *)o->pointer)->isa==classes[i].identity) {pthread_mutex_unlock(&lock);return -1;}
+    while(class_count>checkpoint) free_entry(&classes[--class_count]);
+    rebuild_subclasses();pthread_mutex_unlock(&lock);return 0;
 }
 void *im2_objc_alloc(Im2ObjcClass *cls,void (*destroy)(void *)) {
-    if(!im2_objc_is_class(cls) || cls->data->ro->flags&1u) return NULL;
-    void *p=calloc(1,cls->data->ro->instance_size); Object *o=malloc(sizeof(*o));
+    const Im2ObjcClass *info=im2_objc_class_metadata(cls);
+    if(!info || info->data->ro->flags&1u) return NULL;
+    void *p=calloc(1,info->data->ro->instance_size); Object *o=malloc(sizeof(*o));
     if(!p || !o) {free(p);free(o);return NULL;}
     ((Im2ObjcObject *)p)->isa=cls; *o=(Object){p,1,destroy,NULL};
     pthread_mutex_lock(&lock); o->next=objects; objects=o; pthread_mutex_unlock(&lock); return p;
@@ -133,7 +187,7 @@ void *im2_objc_alloc(Im2ObjcClass *cls,void (*destroy)(void *)) {
 void *im2_objc_retain(void *p) {
     if(!p || im2_objc_is_class(p)) return p;
     pthread_mutex_lock(&lock); Object *o=object_record(p);
-    if(o && o->refs<SIZE_MAX) o->refs++; else p=NULL;
+    if(o && o->refs && o->refs<SIZE_MAX) o->refs++; else p=NULL;
     pthread_mutex_unlock(&lock); return p;
 }
 size_t im2_objc_retain_count(const void *p) {
@@ -146,11 +200,16 @@ int im2_objc_release(void *p) {
     pthread_mutex_lock(&lock); Object **prev=&objects;
     while(*prev && (*prev)->pointer!=p) prev=&(*prev)->next;
     Object *o=*prev;
-    if(!o) {pthread_mutex_unlock(&lock);return -1;}
+    if(!o || !o->refs) {pthread_mutex_unlock(&lock);return -1;}
     if(--o->refs) {pthread_mutex_unlock(&lock);return 0;}
-    *prev=o->next; pthread_mutex_unlock(&lock);
+    /* Keep the dying object discoverable during its -dealloc chain. Zero refs
+     * rejects resurrection/double release while guest superclass lookup still works. */
+    pthread_mutex_unlock(&lock);
     if(o->destroy) o->destroy(p);
-    free(p);free(o);return 0;
+    pthread_mutex_lock(&lock);prev=&objects;
+    while(*prev && *prev!=o) prev=&(*prev)->next;
+    if(*prev==o) *prev=o->next;
+    pthread_mutex_unlock(&lock);free(p);free(o);return 0;
 }
 static void drain_items(Pool *p) {
     while(p->queued) { Autorelease *a=p->queued;p->queued=a->next;im2_objc_release(a->object);free(a); }

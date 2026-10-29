@@ -24,6 +24,8 @@ jobs:
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
             vitasdk/vitasdk@sha256:8227da1b596d981f4513cd9b36bda1e43857f6dae5bcf4312c1cd40167f7d9bb \
             bash -c 'set -e; bash tools/build_loader_elf.sh; bash tools/build_arm_dispatch_test.sh'
+      - name: Inspect ABI routing in the actual linked ARM import table
+        run: python3 tests/test_elf_imports.py --elf build/loader-full/im2_ios_loader
       - name: Execute real ARM and Thumb assembly with synthetic inputs
         run: |
           python3 -m venv build/arm-test-python

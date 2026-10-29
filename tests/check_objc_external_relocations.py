@@ -6,7 +6,7 @@ root=Path(__file__).resolve().parents[1]
 s=(root/"vendor/ios-loader-boilerplate/source/macho.c").read_text()
 checks={
  "external relocations inspected":"dysym->extreloff+(uint64_t)dysym->nextrel*8u" in s,
- "classrefs treated as data":"!is_class || imp->data" in s,
+ "classrefs treated as data":"!is_class || imp->data==IM2_IMPORT_DATA" in s,
  "unknown classes fail closed":"if(external.unresolved_objc_classes)" in s,
  "ObjC class symbol recognized":'_OBJC_CLASS_$_' in s,
  "ObjC metaclass symbol recognized":'_OBJC_METACLASS_$_' in s,

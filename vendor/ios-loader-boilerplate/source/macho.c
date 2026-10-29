@@ -19,6 +19,8 @@
 #include "macho.h"
 #include "macho_reloc.h"
 #include "macho_name.h"
+#include "macho_init.h"
+#include "objc_guest.h"
 
 #define LC_SEGMENT 0x1
 #define LC_SYMTAB 0x2
@@ -75,6 +77,7 @@ static uint32_t nsyms;
 static uint32_t strtab_size;
 static const char *strtab;
 static uint32_t text_vm, text_size, data_vm, data_size;
+static uint32_t code_vm,code_size;
 static uint8_t *text_buf;
 static uintptr_t text_real;
 static uint32_t macho_slide;
@@ -208,7 +211,8 @@ static int external_symbol(void *opaque,uint32_t idx,uint32_t *address) {
     if(!memchr(name,0,strtab_size-symtab[idx].n_strx)) return -1;
     int is_class=!strncmp(name,"_OBJC_CLASS_$_",14) || !strncmp(name,"_OBJC_METACLASS_$_",18);
     const import_entry *imp=imports_lookup(name);
-    if(imp && (!is_class || imp->data)) {
+    if(imp && (!is_class || imp->data==IM2_IMPORT_DATA)) {
+        if(imp->data<IM2_IMPORT_FUNCTION || imp->data>IM2_IMPORT_ABI_ENTRY) return -1;
         *address=imp->data?imp->addr:make_thunk(imp->addr,ml_align_call);return 0;
     }
     uintptr_t guest=macho_sym(name);
@@ -307,11 +311,28 @@ static int apply_rebase(const char *rebase_path,const dysymtab_command *dynamic,
     return 0;
 }
 
+static const uint8_t *read_guest_metadata(void *context,uint32_t address,size_t bytes,int executable) {
+    (void)context;
+    if(address<macho_slide) return NULL;
+    uint32_t vm=address-macho_slide;
+    if(executable && (!code_size || vm<code_vm || (uint64_t)vm+bytes>(uint64_t)code_vm+code_size)) return NULL;
+    if(vm>=text_vm && (uint64_t)vm+bytes<=(uint64_t)text_vm+text_size) return text_buf+(vm-text_vm);
+    if(!executable && vm>=data_vm && (uint64_t)vm+bytes<=(uint64_t)data_vm+data_size) return (const uint8_t *)(uintptr_t)address;
+    return NULL;
+}
+uintptr_t macho_entry(const char *name) {
+    uintptr_t fn=macho_sym(name),pc=fn&~(uintptr_t)1u;
+    if(!fn || !code_size || (pc&((fn&1u)?1u:3u)) ||
+       pc<(uint64_t)macho_slide+code_vm || pc+((fn&1u)?2u:4u)>(uint64_t)macho_slide+code_vm+code_size) return 0;
+    return fn;
+}
+
 int macho_load(const char *bin_path, const char *rebase_path) {
     guest_exec_ready = 0;
     macho_slide = 0;
     mod_init_addr = 0;
     mod_init_count = 0;
+    code_vm=code_size=0;
     l_info("Loading Mach-O executable: %s", bin_path);
     FILE *f = fopen(bin_path, "rb");
     if (!f)
@@ -528,7 +549,12 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     // Initialize special sections
     for (int i = 0; i < nsects_total; i++) {
         section *s = sects[i];
+        if(im2_macho_name_equal(s->sectname,"__text")) {
+            if(code_size || !s->size || s->addr<text_vm || (uint64_t)s->addr+s->size>(uint64_t)text_vm+text_size) return -1;
+            code_vm=s->addr;code_size=s->size;
+        }
         if (im2_macho_name_equal(s->sectname, "__mod_init_func")) {
+            if(mod_init_addr) return -1;
             if ((s->size & 3u) || s->addr < data_vm ||
                 (uint64_t)s->addr + s->size > (uint64_t)data_vm + data_size)
                 return -1;
@@ -608,6 +634,7 @@ int macho_load(const char *bin_path, const char *rebase_path) {
                             return -1;
                         const import_entry *imp = imports_lookup(name);
                         if (imp) {
+                            if(imp->data<IM2_IMPORT_FUNCTION || imp->data>IM2_IMPORT_ABI_ENTRY) return -1;
                             if (imp->data) {
                                 slots[i] = imp->addr;
                             } else {
@@ -631,6 +658,26 @@ int macho_load(const char *bin_path, const char *rebase_path) {
         return -1;
     }
 
+    // Guest class metadata is consumed only after all symbol bindings are established.
+    // Categories require explicit method merging; do not silently ignore their overrides.
+    for(int i=0;i<nsects_total;i++) {
+        const section *sec=sects[i];
+        if(im2_macho_name_equal(sec->sectname,"__objc_catlist") && sec->size) {
+            l_error("Objective-C categories not yet supported");return -1;
+        }
+    }
+    for(int i=0;i<nsects_total;i++) {
+        const section *sec=sects[i];
+        if(!im2_macho_name_equal(sec->sectname,"__objc_classlist")) continue;
+        if(sec->size%4u || sec->addr<data_vm ||
+           (uint64_t)sec->addr+sec->size>(uint64_t)data_vm+data_size) return -1;
+        char error[160];
+        if(im2_objc_register_guest_list(macho_slide+sec->addr,sec->size/4u,
+            read_guest_metadata,NULL,error,sizeof(error))) {
+            l_error("Guest Objective-C class registration failed: %s",error);return -1;
+        }
+    }
+
     // Copy final __TEXT to executable memory block
     kuKernelCpuUnrestrictedMemcpy((void *)(macho_slide + text_vm), text_buf, text_size);
     kuKernelFlushCaches((void *)(macho_slide + text_vm), text_size);
@@ -649,21 +696,15 @@ int macho_load(const char *bin_path, const char *rebase_path) {
 #endif
 }
 
-void macho_run_inits(void) {
-    if (!guest_exec_ready || !mod_init_addr || !mod_init_count)
-        return;
-    l_info("Executing %u global constructors (__mod_init_func)...", (unsigned)mod_init_count);
-    uint32_t *funcs = (uint32_t *)mod_init_addr;
-    for (uint32_t i = 0; i < mod_init_count; i++) {
-        if (funcs[i]) {
-            uintptr_t fn = funcs[i];
-            uintptr_t arm_pc = fn & ~(uintptr_t)1u;
-            if (arm_pc < text_real || arm_pc >= text_real + text_size) {
-                l_error("Constructor %u points outside mapped __TEXT: 0x%08X",
-                        (unsigned)i, (unsigned)fn);
-                return;
-            }
-            call_guest((void *)fn, 0, 0, 0, 0);
-        }
-    }
+static void invoke_initializer(void *context,uint32_t function) {
+    (void)context;call_guest((void *)(uintptr_t)function,0,0,0,0);
+}
+int macho_run_inits(void) {
+    if(!guest_exec_ready) return -1;
+    if(!mod_init_count) return 0;
+    if(!mod_init_addr) return -1;
+    int result=im2_run_initializers((const uint32_t *)(uintptr_t)mod_init_addr,
+        mod_init_count,macho_slide+code_vm,code_size,invoke_initializer,NULL);
+    if(result) l_error("Constructor list rejected before guest execution");
+    return result;
 }

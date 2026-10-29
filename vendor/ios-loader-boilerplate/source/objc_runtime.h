@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
  * New independent runtime core; ABI layouts researched against objc4-437.
- * It implements explicit host classes only, not Apple's complete Objective-C runtime. */
+ * It implements explicit host classes and validated guest identities, not Apple's complete runtime. */
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -43,3 +43,15 @@ size_t im2_objc_retain_count(const void *);
 /* Thread-local nested pools; releasing an out-of-order pool is rejected. */
 int im2_objc_pool_push(void *pool_object);
 int im2_objc_pool_drain(void *pool_object);
+
+/* Sidecar metadata preserves foreign class identity; guest class bytes are never rewritten. */
+const Im2ObjcClass *im2_objc_class_metadata(const void *identity);
+typedef struct { Im2Imp imp; size_t stret_size; int guest; } Im2ObjcTarget;
+int im2_objc_lookup_target(const void *receiver,const char *selector,
+    const void *current_class,Im2ObjcTarget *target);
+Im2ObjcClass *im2_objc_register_foreign_class(const char *name,void *identity,void *meta,
+    Im2ObjcClass *super,size_t instance_size,const Im2MethodSpec *,size_t,
+    const Im2MethodSpec *,size_t);
+/* Startup-only rollback; rejects rollback if objects of removed classes already exist. */
+size_t im2_objc_registration_checkpoint(void);
+int im2_objc_registration_rollback(size_t checkpoint);
