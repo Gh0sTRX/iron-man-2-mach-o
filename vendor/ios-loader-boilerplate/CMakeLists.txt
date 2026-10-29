@@ -32,6 +32,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/foundation.c
   source/cfstring.c
   source/collections.c
+  source/url.c
   source/objc_runtime.c
   source/objc_guest.c
   source/gles.c
