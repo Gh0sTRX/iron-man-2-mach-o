@@ -109,9 +109,12 @@ int main(void) {
     assert(im2_objc_retain_count(v)==0);
 
     /* The guest EAGLView requires its exact UIView superclass instance size. */
-    Im2ObjcClass *eagl=im2_objc_register_class("EAGLView",
+    Im2ObjcClass *eagl=im2_objc_register_foreign_class("EAGLView",
+        (void *)(uintptr_t)0x24000000,(void *)(uintptr_t)0x24000020,
         im2_objc_class_named("UIView"),128,NULL,0,NULL,0);
-    assert(eagl);
+    assert(eagl && im2_objc_is_class(eagl));
+    assert(im2_objc_is_class((void *)(uintptr_t)0x24000020));
+    assert(im2_objc_class_metadata(eagl)->superclass==im2_objc_class_named("UIView"));
     void *guest_like=im2_objc_alloc(eagl,invoke_dealloc);
     assert(guest_like);
     assert(init_frame(guest_like,frame)==guest_like);
