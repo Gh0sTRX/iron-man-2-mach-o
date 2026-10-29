@@ -53,5 +53,6 @@
   "all_18_c_asm_units_compiled": true,
   "guest_metadata_synthetic_asan_ubsan_passed": true,
   "linked_objc_import_kinds_checked": true,
-  "constructor_snapshot_asan_ubsan_passed": true
+  "constructor_snapshot_asan_ubsan_passed": true,
+  "guest_class_commit_ci": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40956243220"
 }

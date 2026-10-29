@@ -27,3 +27,9 @@ Host guest-metadata testi `-no-pie` ile çalışır; böylece dış host sınıf
 Özgün Mach-O/IPA/RBS1 yerelde yok. Framework sınıflarının 62'si hâlâ eksik; iki sınıf yalnız kısmi native davranışa sahip. UIKit lifecycle, bütün özgün importlar, CFString sabitleri ve runtime `+initialize`/`+load`, category/protocol davranışları tamamlanmadı. Guest aggregate return encoding'leri `SIZE_MAX` ile desteklenmiyor olarak işaretlenir; çağrı anında tahmin ederek stret seçilmez. Yeni guest kayıt kodu tek başına tam ObjC uyumluluğu değildir.
 
 Varsayılan guest yürütme kapısı hâlâ kapalı. Gerçek Vita RX/cache, özgün constructor ve oyun boot kanıtı yok; upstream lisans belirsizliği sürüyor. Sadece iki derleme kapısı açık, altı release kapısı kapalıdır.
+
+## CI ve analiz aracındaki ek düzeltme
+
+Yerel sınıf/ABI commit'i `b9d0f3c` GitHub CI'dan başarıyla geçti: https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40956243220 .
+
+Sonraki incelemede ana `scan_macho.py` aracında da gerçek NUL yerine iki karakterli `\\0` arandığı bulundu. Segment/dylib/sembol adlarının okunması düzeltildi; command envelope, alt komut boyutları, string ve dynamic undefined aralıkları doğrulanıyor. Genel nlist sayısı korunurken LC_DYSYMTAB import sayısı ayrı raporlanıyor. Sentetik testte iki generic kayıt (biri debug), bir gerçek dinamik import olarak ayrılıyor. Özgün dosyanın 490 importu bu oturumda yeniden ölçülmüş değildir.
