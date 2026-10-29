@@ -37,6 +37,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/file_manager.c
   source/uikit_hierarchy.c
   source/uikit_application.c
+  source/uikit_bootstrap.c
   source/objc_runtime.c
   source/objc_guest.c
   source/gles.c
