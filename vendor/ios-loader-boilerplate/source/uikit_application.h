@@ -8,3 +8,6 @@
 /* Registers the UIApplication singleton and binds UIWindow activation.
  * Must run after im2_uikit_hierarchy_init(). */
 int im2_uikit_application_init(Im2ObjcClass *root,void (*failure)(const char *));
+
+/* Controlled process shutdown only; rejects teardown with outstanding retains. */
+int im2_uikit_application_shutdown(void);
