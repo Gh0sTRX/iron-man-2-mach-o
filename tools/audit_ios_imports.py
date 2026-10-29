@@ -23,7 +23,7 @@ def table_names(source_dir):
             provided.update("_"+m.group(1) for m in
                             re.finditer(r"\b(?:F|D)\s*\(\s*([A-Za-z_]\w*)",table))
             provided.update(m.group(1) for m in
-                            re.finditer(r'"(_[A-Za-z_]\w*)"',table))
+                            re.finditer(r'"(_[A-Za-z_][A-Za-z0-9_$]*)"',table))
     return provided
 
 def original_names(path):
