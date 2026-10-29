@@ -12,6 +12,7 @@ on:
       - 'tests/test_import_audit_synthetic.py'
       - 'tools/audit_ios_imports.py'
       - 'tools/check_vita_dependencies.sh'
+      - 'tools/build_loader_objects.sh'
       - '.github/workflows/loader-readiness.yml'
 permissions:
   contents: read
@@ -31,7 +32,5 @@ jobs:
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace vitasdk/vitasdk:2026.08 sh -lc '
             set -eu
-            bash tools/check_vita_dependencies.sh
-            cmake -S vendor/ios-loader-boilerplate -B build/loader-objects -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
-            cmake --build build/loader-objects --parallel 2
+            bash tools/build_loader_objects.sh
           '
