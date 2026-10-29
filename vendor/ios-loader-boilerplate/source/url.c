@@ -122,6 +122,14 @@ static int url_assign_file(Im2URL *u,const char *path) {
     free(encoded);
     return rc;
 }
+const char *im2_url_local_file_path(const void *obj) {
+    /* Never dereference arbitrary guest pointers or treat remote URLs as paths. */
+    if(!url_class || im2_objc_object_class(obj)!=url_class)return NULL;
+    const Im2URL *u=obj;
+    if(!u->scheme || strcmp(u->scheme,"file") || !u->path || u->path[0]!='/')
+        return NULL;
+    return u->path;
+}
 static uintptr_t init_string(Im2URL *self,const char *selector,void *string) {
     (void)selector;
     const char *text=url_input(string);
