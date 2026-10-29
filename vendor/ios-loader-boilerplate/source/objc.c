@@ -24,6 +24,7 @@
 #include "file_manager.h"
 #include "uikit_hierarchy.h"
 #include "uikit_application.h"
+#include "uikit_bootstrap.h"
 #include "darwin.h"
 
 // ---------------------------------------------------------------- NSString
@@ -433,6 +434,20 @@ static void *ns_class_from_string(void *string) {
     return im2_objc_class_named(name);
 }
 
+/* Real owner _main passes nil principal class and the CFString "AppController".
+ * Dispatch the actual registered legacy delegate callback. UIApplicationMain
+ * cannot return success until a real UIKit event/render loop exists. */
+static int ui_application_main(int argc,char *const *argv,
+    void *principal_class_name,void *delegate_class_name) {
+    const char *delegate=im2_string_utf8(delegate_class_name);
+    l_info("UIApplicationMain delegate=%s argc=%d",
+        delegate?delegate:"<unregistered>",argc);
+    int result=im2_uikit_launch_once(argc,argv,principal_class_name,
+        delegate_class_name,call_guest);
+    if(result==IM2_UIKIT_BOOT_NEEDS_RUN_LOOP)
+        fatal_error("Legacy UIKit delegate launch executed, but the Vita run loop / render pipeline is not implemented");
+    fatal_error("UIApplicationMain refused invalid/unsupported delegate or startup ABI");
+}
 static void enumeration_mutation(void *object) {
     fatal_error("Collection mutated during Objective-C enumeration: %p",object);
 }
@@ -445,6 +460,7 @@ static void enumeration_mutation(void *object) {
 const import_entry objc_imports[] = {
     F(CFStringGetCString, cf_string_get_cstring),F(CFRelease, cf_release),F(CFRetain, cf_retain),
     F(NSClassFromString, ns_class_from_string),F(objc_enumerationMutation, enumeration_mutation),
+    F(UIApplicationMain, ui_application_main),
     F_ABI(objc_msgSend, im2_objc_msgSend_entry), F_ABI(objc_msgSend_stret, im2_objc_msgSend_stret_entry),
     F_ABI(objc_msgSendSuper2, im2_objc_msgSendSuper2_entry),
     F_ABI(objc_msgSendSuper2_stret, im2_objc_msgSendSuper2_stret_entry),
