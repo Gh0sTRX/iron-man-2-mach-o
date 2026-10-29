@@ -315,7 +315,17 @@ static int sel_is(const char *sel, const char *name) { return !strcmp(sel, name)
 static uint32_t objc_msgSend(void *self, const char *sel, ...) {
     va_list ap;
     va_start(ap, sel);
-    uint32_t a = va_arg(ap, uint32_t); // first argument (if present)
+    // Do not read a variadic argument for zero-argument selectors.
+    // Doing so is undefined behavior and can corrupt the ARMv6 guest call frame.
+    uint32_t a = 0;
+    if (!sel) {
+        va_end(ap);
+        return 0;
+    }
+    const int takes_arg =
+        strchr(sel, ':') != NULL;
+    if (takes_arg)
+        a = va_arg(ap, uint32_t);
     uint32_t r = 0;
     const struct tm *now;
     time_t t;
@@ -329,8 +339,12 @@ static uint32_t objc_msgSend(void *self, const char *sel, ...) {
         r = (uint32_t)ns_cstr(self);
     } else if (sel_is(sel, "getCString:maxLength:encoding:")) {
         uint32_t max = va_arg(ap, uint32_t);
-        snprintf((char *)a, max, "%s", ns_cstr(self));
-        r = 1;
+        if (a && max) {
+            snprintf((char *)(uintptr_t)a, max, "%s", ns_cstr(self));
+            r = 1;
+        } else {
+            r = 0;
+        }
     } else if (sel_is(sel, "systemFontOfSize:")) {
         union { uint32_t u; float f; } v = {a};
         r = (uint32_t)font_of_size(v.f);
