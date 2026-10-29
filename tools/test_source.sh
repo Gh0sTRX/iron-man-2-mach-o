@@ -33,6 +33,7 @@ python3 tests/test_scanner.py
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
   -pthread -I vendor/ios-loader-boilerplate/source tests/test_foundation.c \
   vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c \
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_foundation
 build/host-runtime/test_foundation
@@ -57,6 +58,7 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -pthread -I vendor/ios-loader-boilerplate/source tests/test_file_manager.c \
   vendor/ios-loader-boilerplate/source/file_manager.c \
   vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c \
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_file_manager
 build/host-runtime/test_file_manager
@@ -68,6 +70,7 @@ python3 tests/test_preflight_synthetic.py
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
   -no-pie -pthread -I vendor/ios-loader-boilerplate/source tests/test_cfstrings.c \
   vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c \
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/darwin_printf.c \
   vendor/ios-loader-boilerplate/source/collections.c \
@@ -78,6 +81,7 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -pthread -I vendor/ios-loader-boilerplate/source tests/test_collections.c \
   vendor/ios-loader-boilerplate/source/collections.c \
   vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c \
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_collections
 build/host-runtime/test_collections
