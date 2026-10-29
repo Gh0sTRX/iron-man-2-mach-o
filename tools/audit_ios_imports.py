@@ -21,7 +21,7 @@ def table_names(source_dir):
         for block in re.finditer(r"const\s+import_entry\s+\w+_imports\s*\[\s*\]\s*=\s*\{(.*?)\};",data,re.S):
             table=block.group(1)
             provided.update("_"+m.group(1) for m in
-                            re.finditer(r"\b(?:F|D)\s*\(\s*([A-Za-z_]\w*)",table))
+                            re.finditer(r"\b(?:F|D|V)\s*\(\s*([A-Za-z_]\w*)",table))
             provided.update(m.group(1) for m in
                             re.finditer(r'"(_[A-Za-z_][A-Za-z0-9_$]*)"',table))
     return provided
