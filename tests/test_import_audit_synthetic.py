@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory() as td:
 const import_entry darwin_imports[] = {
     F(malloc, malloc),
     D(glBindTexture),
+    V(__stderrp, &stderr_ptr),
     {"_OBJC_CLASS_$_SomeClass", (uintptr_t)&some_class, 1},
     // F(not_an_import, NULL)
     /* F(also_not_an_import, NULL) */
@@ -22,10 +23,11 @@ const import_entry darwin_imports[] = {
     have=audit.table_names(src)
     assert "_malloc" in have
     assert "_glBindTexture" in have
+    assert "___stderrp" in have
     assert "_OBJC_CLASS_$_SomeClass" in have
     assert "_not_an_import" not in have
     assert "_also_not_an_import" not in have
-    assert len(have)==3,have
+    assert len(have)==4,have
     expected=src/"original.json"
     expected.write_text('{"dynamic_imports":["_malloc","_glBindTexture","_missing"]}')
     requested=audit.original_names(expected)
