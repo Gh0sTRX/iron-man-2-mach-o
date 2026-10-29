@@ -1,5 +1,5 @@
 {
-  "note": "This inventory counts original owner Mach-O __objc_classrefs only. UINavigationController, UIControl and UIResponder are needed as superclasses but are not in the 64 classref list; they are registered by the UIKit module. Measured UIKit superclass sizes unblock metadata staging but UIKit class/ivar ABI, rendering, touches, app lifecycle and guest game boot remain unverified.",
+  "note": "Original classref inventory (64 classes) from the owner Mach-O. Native UIApplication singleton, non-owning delegate, status-bar orientation state and retained key window are implemented, but UIApplicationMain event loop, actual screen rendering and Vita boot are not. The original main passes the CFString 'AppController' as delegateClassName.",
   "classes": [
     {
       "name": "NSString",
@@ -46,7 +46,7 @@
     {
       "name": "UIApplication",
       "source_classref_slots": 8,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
