@@ -99,9 +99,14 @@ static int url_assign(Im2URL *u,const char *text) {
 }
 static int url_assign_file(Im2URL *u,const char *path) {
     if(!path || path[0]!='/')return -1;
-    size_t n=strlen(path);
-    if(n>URL_LIMIT/3u)return -1;
-    char *encoded=malloc(8u+n*3u);
+    size_t n=strlen(path),needed=7u;
+    if(n>URL_LIMIT-7u)return -1;
+    for(size_t i=0;i<n;i++) {
+        unsigned char c=(unsigned char)path[i];
+        needed+=(c<=0x20 || c>=0x7f || c=='%' || c=='?' || c=='#')?3u:1u;
+        if(needed>URL_LIMIT)return -1;
+    }
+    char *encoded=malloc(needed+1u);
     if(!encoded)return -1;
     memcpy(encoded,"file://",7);
     size_t out=7;
@@ -109,7 +114,6 @@ static int url_assign_file(Im2URL *u,const char *path) {
     for(size_t i=0;i<n;i++) {
         unsigned char c=(unsigned char)path[i];
         if(c<=0x20 || c>=0x7f || c=='%' || c=='?' || c=='#') {
-            if(!c){free(encoded);return -1;}
             encoded[out++]='%';encoded[out++]=digits[c>>4];encoded[out++]=digits[c&15];
         }else encoded[out++]=(char)c;
     }
