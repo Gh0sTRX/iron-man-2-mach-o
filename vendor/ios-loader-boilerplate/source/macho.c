@@ -166,53 +166,67 @@ void macho_hook(const char *name, void *dst) {
     kuKernelFlushCaches((void *)(a & ~1), sizeof(code));
 }
 
-static void apply_rebase(const char *rebase_path) {
+static int apply_rebase(const char *rebase_path) {
+    if (!rebase_path)
+        return -1;
     FILE *f = fopen(rebase_path, "rb");
     if (!f) {
-        l_warn("Not found %s: skipping offline rebase", rebase_path);
-        return;
+        l_error("Required RBS1 table missing: %s", rebase_path);
+        return -1;
     }
     uint32_t magic = 0, count = 0;
-    if (fread(&magic, 4, 1, f) != 1 || magic != 0x31534252 /* RBS1 */) {
+    if (fread(&magic, 4, 1, f) != 1 || magic != 0x31534252u ||
+        fread(&count, 4, 1, f) != 1) {
+        l_error("Invalid RBS1 header");
         fclose(f);
-        l_error("Invalid rebase.bin header format (expected RBS1)");
-        return;
+        return -1;
     }
-    if (fread(&count, 4, 1, f) != 1) {
+    const uint64_t vm_span = (uint64_t)data_vm + data_size - text_vm;
+    if (!count || (uint64_t)count > vm_span / 4u || count > 1000000u) {
+        l_error("Impossible RBS1 entry count: %u", (unsigned)count);
         fclose(f);
-        return;
+        return -1;
     }
-
-    uint32_t *entries = malloc(count * sizeof(uint32_t));
+    uint32_t *entries = malloc((size_t)count * sizeof(uint32_t));
     if (!entries) {
         fclose(f);
-        return;
+        return -1;
     }
-    if (count > 1000000u || fread(entries, sizeof(uint32_t), count, f) != count) {
-        l_error("Truncated or excessive RBS1 entries");
+    if (fread(entries, sizeof(uint32_t), count, f) != count || fgetc(f) != EOF) {
+        l_error("Truncated or trailing RBS1 data");
         free(entries);
         fclose(f);
-        return;
+        return -1;
     }
     fclose(f);
 
-    l_info("Applying %u rebase words from %s...", (unsigned)count, rebase_path);
-    int applied = 0;
+    // Validate ALL addresses before touching image memory.
+    // Iron Man 2's generated RBS1 is sorted, unique and word-aligned.
+    uint32_t previous = 0;
     for (uint32_t i = 0; i < count; i++) {
-        uint32_t va = entries[i];
-        if (va >= data_vm && va < data_vm + data_size) {
-            uint32_t *ptr = (uint32_t *)(macho_slide + va);
-            *ptr += macho_slide;
-            applied++;
-        } else if (va >= text_vm && va < text_vm + text_size) {
-            // Rebase on text section stubs
-            uint32_t *ptr = (uint32_t *)(text_buf + (va - text_vm));
-            *ptr += macho_slide;
-            applied++;
+        const uint32_t va = entries[i];
+        const int in_text = va >= text_vm &&
+            (uint64_t)va + 4u <= (uint64_t)text_vm + text_size;
+        const int in_data = va >= data_vm &&
+            (uint64_t)va + 4u <= (uint64_t)data_vm + data_size;
+        if ((va & 3u) || (i && va <= previous) || (!in_text && !in_data)) {
+            l_error("RBS1 invalid address at %u: 0x%08X",
+                    (unsigned)i, (unsigned)va);
+            free(entries);
+            return -1;
         }
+        previous = va;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        const uint32_t va = entries[i];
+        uint32_t *ptr = va >= data_vm ?
+            (uint32_t *)(uintptr_t)(macho_slide + va) :
+            (uint32_t *)(text_buf + (va - text_vm));
+        *ptr += macho_slide;
     }
     free(entries);
-    l_info("Rebase complete: %d words relocated.", applied);
+    l_info("RBS1 validated and applied: %u relocation words", (unsigned)count);
+    return 0;
 }
 
 int macho_load(const char *bin_path, const char *rebase_path) {
@@ -369,8 +383,8 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     }
 
     // Rebase original local pointers BEFORE overwriting imported symbol slots.
-    if (rebase_path)
-        apply_rebase(rebase_path);
+    if (apply_rebase(rebase_path) != 0)
+        return -1;
 
     // Resolve dynamic symbol imports (indirect symbols and pointer stubs)
     if (dysym) {
