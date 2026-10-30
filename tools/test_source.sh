@@ -59,6 +59,17 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -pthread -I vendor/ios-loader-boilerplate/source tests/test_uikit_screen.c \
   vendor/ios-loader-boilerplate/source/uikit_screen.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -lm -o build/host-runtime/test_uikit_screen
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_eagl_bridge.c \
+  vendor/ios-loader-boilerplate/source/eagl_bridge.c \
+  vendor/ios-loader-boilerplate/source/uikit_hierarchy.c \
+  vendor/ios-loader-boilerplate/source/collections.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/url.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_eagl_bridge
+build/host-runtime/test_eagl_bridge
 build/host-runtime/test_uikit_screen
 
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
