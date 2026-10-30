@@ -141,6 +141,72 @@ static int view_tag(void *self,const char *selector) {
     UiState *s=state_for(self,0);
     return s?s->tag:0;
 }
+static void view_remove_super(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,view))fail("removeFromSuperview receiver is not UIView");
+    UiState *child=state_for(self,0);
+    if(!child || !child->parent)return;
+    void *parent=child->parent;
+    UiState *ps=state_for(parent,0);
+    if(!ps)fail("UIView parent sidecar unavailable");
+    UiChild **link=&ps->children;
+    while(*link && (*link)->view!=self)link=&(*link)->next;
+    if(!*link)fail("UIView parent/child ownership mismatch");
+    UiChild *node=*link;
+    *link=node->next;
+    child->parent=NULL;
+    free(node);
+    /* Removing a subview releases exactly the parent's one ownership. */
+    if(im2_objc_release(self))fail("UIView child release failed");
+}
+static void view_add_subview(void *self,const char *selector,void *child) {
+    (void)selector;
+    if(!kind_of(self,view) || !kind_of(child,view))
+        fail("addSubview requires two registered UIViews");
+    if(self==child)fail("UIView cannot add itself as a subview");
+    /* Fail closed on cycles, including reparenting an ancestor. */
+    void *ancestor=self;
+    for(size_t depth=0;ancestor;depth++) {
+        if(depth>=128)fail("UIView ancestry depth exceeded");
+        if(ancestor==child)fail("UIView hierarchy cycle rejected");
+        UiState *state=state_for(ancestor,0);
+        ancestor=state?state->parent:NULL;
+    }
+    UiState *cs=state_for(child,1);
+    if(cs->parent==self)return; /* No duplicate strong references. */
+    void *held=im2_objc_retain(child);
+    if(!held)fail("Unable to retain UIView child");
+    if(cs->parent)view_remove_super(child,"removeFromSuperview");
+    UiChild *entry=calloc(1,sizeof(*entry));
+    if(!entry) {
+        im2_objc_release(held);
+        fail("Unable to allocate UIView subview link");
+    }
+    entry->view=child;
+    UiState *parent=state_for(self,1);
+    UiChild **tail=&parent->children;
+    while(*tail)tail=&(*tail)->next;
+    *tail=entry;
+    cs->parent=self;
+}
+static uintptr_t view_superview(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,view))fail("superview receiver is not UIView");
+    UiState *s=state_for(self,0);
+    return (uintptr_t)(s?s->parent:NULL);
+}
+static uintptr_t view_window(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,view))fail("window receiver is not UIView");
+    void *cursor=self;
+    for(size_t depth=0;cursor;depth++) {
+        if(depth>=128)fail("UIView window ancestry cycle");
+        if(kind_of(cursor,window_class))return (uintptr_t)cursor;
+        UiState *s=state_for(cursor,0);
+        cursor=s?s->parent:NULL;
+    }
+    return 0;
+}
 static void view_dealloc(void *self,const char *selector) {
     (void)selector;discard_state(self);
 }
@@ -197,6 +263,10 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         METHOD("isHidden","c@:",view_hidden),
         METHOD("setTag:","v@:i",view_set_tag),
         METHOD("tag","i@:",view_tag),
+        METHOD("addSubview:","v@:@",view_add_subview),
+        METHOD("removeFromSuperview","v@:",view_remove_super),
+        METHOD("superview","@@:",view_superview),
+        METHOD("window","@@:",view_window),
         METHOD("dealloc","v@:",view_dealloc)
     };
     view=reg("UIView",responder,36,vm,sizeof(vm)/sizeof(*vm));
