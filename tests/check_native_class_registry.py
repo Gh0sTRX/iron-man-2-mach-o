@@ -44,6 +44,10 @@ assert "F(UIApplicationMain, ui_application_main)" in src,"UIApplicationMain imp
 assert "im2_uikit_launch_once(argc,argv,principal_class_name," in src,"Missing delegate launch stage"
 assert "source/uikit_bootstrap.c" in cmake,"Bootstrap not compiled for Vita ELF"
 assert "tests/test_uikit_bootstrap.c" in runner,"Bootstrap behavioral tests absent"
+assert 'im2_uikit_screen_init(root,(Im2ScreenGeometry){320.f,480.f})' in src, "Owner UIScreen geometry registration missing"
+assert "source/uikit_screen.c" in cmake, "UIScreen missing from Vita CMake"
+assert "tests/test_uikit_screen.c" in runner, "UIScreen native CGRect tests absent"
+
 
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)
