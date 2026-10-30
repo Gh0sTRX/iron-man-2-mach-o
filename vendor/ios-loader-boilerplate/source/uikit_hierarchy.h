@@ -15,6 +15,8 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*failure)(const char *
 /* Internal observation for tests and eventual renderer; does not mimic CGRect
  * return ABI. Returns -1 until a frame was explicitly initialized. */
 int im2_uikit_view_frame(const void *receiver,Im2Rect32 *out);
+/* Internal dirty flags pending a real Vita layout and rendering pipeline. */
+int im2_uikit_view_invalidation(const void *receiver,int *needs_layout,int *needs_display);
 /* Registers one application-owned UIWindow activation hook. The window class
  * deliberately refuses makeKeyAndVisible before an application is initialized. */
 int im2_uikit_bind_window_activation(int (*activate)(void *window));
