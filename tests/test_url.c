@@ -75,7 +75,7 @@ int main(void) {
     assert(!send1(cls,"URLWithString:",remote));
     assert(!send1(cls,"URLWithString:",spaces));
     assert(!send1(cls,"URLWithString:",NULL));
-    static const char embedded[]="https://example.com/safe\\0ignored";
+    static const char embedded[]="https://example.com/safe\0ignored";
     void *binary=im2_string_create_bytes(embedded,sizeof(embedded)-1,0);
     assert(binary && im2_string_byte_length(binary)==sizeof(embedded)-1);
     assert(!send1(cls,"URLWithString:",binary));
