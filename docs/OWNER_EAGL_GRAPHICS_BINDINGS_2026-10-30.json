@@ -1,0 +1,52 @@
+{
+  "source": "User-owned original Iron Man 2 v1.0.0 iPhone OS 2.2.1 ARMv6 Mach-O",
+  "binary_sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "external_classref_relocation_slots": [
+    {
+      "vm_address": "0x4e4d80",
+      "symbol": "_OBJC_CLASS_$_EAGLContext"
+    },
+    {
+      "vm_address": "0x4e4db4",
+      "symbol": "_OBJC_CLASS_$_CAEAGLLayer"
+    },
+    {
+      "vm_address": "0x4e4db8",
+      "symbol": "_OBJC_CLASS_$_EAGLContext"
+    }
+  ],
+  "undefined_legacy_eagl_data_symbols": [
+    "_kEAGLColorFormatRGB565",
+    "_kEAGLDrawablePropertyColorFormat",
+    "_kEAGLDrawablePropertyRetainedBacking"
+  ],
+  "verified_selector_references": [
+    "initWithAPI:",
+    "currentContext",
+    "setCurrentContext:",
+    "renderbufferStorage:fromDrawable:",
+    "presentRenderbuffer:",
+    "setDrawableProperties:",
+    "layer",
+    "layerClass",
+    "_createSurface",
+    "_destroySurface",
+    "swapBuffers"
+  ],
+  "native_bridge_classes": [
+    "CALayer",
+    "CAEAGLLayer",
+    "EAGLContext"
+  ],
+  "host_test": "tests/test_eagl_bridge.c",
+  "graphics_backend": "vitaGL 320x480 texture-backed FBO; checked completeness, actual buffer swap",
+  "limitations": [
+    "GL ES OES framebuffer/renderbuffer name mapping and depth/stencil storage are not fully implemented",
+    "Drawable dictionary is owned but not yet interpreted for all iOS color format semantics",
+    "ARM guest EAGLView method execution not demonstrated",
+    "Physical Vita graphics/input/audio tests absent",
+    "Remaining original imports and UIKit lifecycle APIs still block real game startup"
+  ],
+  "original_game_executed_on_vita": false,
+  "physical_vita_verified": false
+}
