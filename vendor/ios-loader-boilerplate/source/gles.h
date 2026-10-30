@@ -19,3 +19,9 @@ void gles_present(void);
  * @brief Returns the total number of draw calls dispatched this session.
  */
 uint32_t gles_get_draw_calls(void);
+
+/* Actual vitaGL FBO-backed iOS EAGLContext bridge.
+ * A 0 return must propagate to the original Cocoa caller as BOOL NO. */
+int gles_eagl_ready(void);
+int gles_eagl_storage(uint32_t renderbuffer_target);
+int gles_eagl_present(uint32_t renderbuffer_target);
