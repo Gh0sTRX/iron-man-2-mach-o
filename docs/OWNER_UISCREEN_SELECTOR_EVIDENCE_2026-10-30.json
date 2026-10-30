@@ -1,0 +1,26 @@
+{
+  "sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "minimum_os": "2.2.1",
+  "status_bar_hidden": true,
+  "selector_references": {
+    "mainScreen": [
+      "0x4e4648"
+    ],
+    "bounds": [
+      "0x4e4644"
+    ],
+    "makeKeyAndVisible": [
+      "0x4e4628"
+    ],
+    "initWithFrame:": [
+      "0x4e4640"
+    ]
+  },
+  "compatibility_assumption": {
+    "screen_width_points": 320,
+    "screen_height_points": 480,
+    "source": "pre-Retina iPhone 2.2.1 points; geometry inferred from original hardware rather than embedded UIKit framework"
+  },
+  "original_arm_executed_by_native_vita_loader": false,
+  "physical_vita_verified": false
+}
