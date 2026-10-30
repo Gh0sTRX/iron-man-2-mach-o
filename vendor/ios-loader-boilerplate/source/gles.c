@@ -34,6 +34,7 @@
 
 static GLuint fbo, fbo_tex;
 static int fbo_ready;
+static int eagl_storage_ready;
 
 // Cached state overwritten during blit that glGet cannot fully query:
 typedef struct {
@@ -176,9 +177,17 @@ static void g_glGenNames(GLsizei n, GLuint *ids) {
 }
 static void g_glBindFramebufferOES(GLenum target, GLuint fb) { glBindFramebuffer(GL_FRAMEBUFFER, fbo); }
 static void g_glNoop(void) {}
-static GLenum g_glCheckFramebufferStatusOES(GLenum target) { return GL_FRAMEBUFFER_COMPLETE_OES; }
+static GLenum g_glCheckFramebufferStatusOES(GLenum target) {
+    if(target != GL_FRAMEBUFFER || !fbo_ready || !eagl_storage_ready)
+        return 0x8CD6u; /* GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_OES */
+    glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+    return glCheckFramebufferStatus(GL_FRAMEBUFFER);
+}
 static void g_glGetRenderbufferParameterivOES(GLenum target, GLenum pname, GLint *v) {
-    *v = pname == GL_RENDERBUFFER_WIDTH_OES ? FB_W : pname == GL_RENDERBUFFER_HEIGHT_OES ? FB_H : 0;
+    if(!v)return;
+    *v = target == 0x8D41u && eagl_storage_ready?
+        (pname == GL_RENDERBUFFER_WIDTH_OES ? FB_W :
+        pname == GL_RENDERBUFFER_HEIGHT_OES ? FB_H : 0) : 0;
 }
 
 // ---------------------------------------------------------------- init / present
@@ -213,7 +222,9 @@ int gles_eagl_storage(uint32_t target) {
      * vitaGL FBO texture. Never report YES without an allocated attachment. */
     if(target != 0x8D41u || !fbo_ready)return 0;
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    return glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+    int complete=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+    eagl_storage_ready=complete;
+    return complete;
 }
 int gles_eagl_present(uint32_t target) {
     if(target != 0x8D41u || !gles_eagl_storage(target))return 0;
