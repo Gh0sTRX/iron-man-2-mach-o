@@ -122,6 +122,9 @@ static uint32_t context_storage(void *receiver,const char *sel,
     if(properties){
         Im2ObjcTarget lookup;
         if(im2_objc_lookup_target(properties,"objectForKey:",NULL,&lookup) || lookup.guest || lookup.stret_size)return 0;
+        /* Retained backing needs NSNumber parsing and a preservation contract.
+         * Refuse this property until both exist, including an explicit false value. */
+        if(((uintptr_t(*)(void *,const char *,void *))lookup.imp)(properties,"objectForKey:",retained_backing))return 0;
         void *value=(void *)((uintptr_t(*)(void *,const char *,void *))lookup.imp)(properties,"objectForKey:",color_format_key);
         if(value){const char *name=im2_string_utf8(value);if(!name || strlen(name)!=im2_string_byte_length(value))return 0;
             if(!strcmp(name,"EAGLColorFormatRGB565"))format=IM2_OES_RGB565;

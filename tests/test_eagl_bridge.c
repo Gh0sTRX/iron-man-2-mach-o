@@ -149,6 +149,14 @@ int main(void) {
     assert(send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",
         IM2_GL_RENDERBUFFER_OES,layer));
     assert(stored==2);
+    assert(im2_objc_retain(properties)==properties);
+    void *backing_key=*(void **)(uintptr_t)eagl_imports[0].addr;
+    void *backing_properties=im2_dictionary_create(&value,&backing_key,1,0,0);assert(backing_properties);
+    send_void1(layer,"setDrawableProperties:",backing_properties);
+    assert(!send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer));
+    assert(stored==2); /* Unsupported retained-backing semantics never reach the GPU callback. */
+    send_void1(layer,"setDrawableProperties:",properties);
+    assert(!im2_objc_release(backing_properties) && !im2_objc_release(properties));
     present_success=0;
     assert(!send_bool_uint(context,"presentRenderbuffer:",IM2_GL_RENDERBUFFER_OES));
     assert(presented==1);
