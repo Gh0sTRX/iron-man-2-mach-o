@@ -137,6 +137,8 @@ int im2_uikit_application_init(Im2ObjcClass *root,void (*on_failure)(const char 
         return -1;
     }
     application->orientation=1; /* UIInterfaceOrientationPortrait. */
+    /* Original owner IPA's Info.plist explicitly declares UIStatusBarHidden=true. */
+    application->status_bar_hidden=1;
     return 0;
 }
 
