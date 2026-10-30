@@ -79,4 +79,23 @@ for misalignment in (0,4):
         if mode=='guest6':assert uc.reg_read(UC_ARM_REG_R0)==21
         if mode=='thumb_guest':assert uc.reg_read(UC_ARM_REG_R0)==3
         checks+=1
+# The actual dispatcher/alignment bridge must preserve the original NSTimer
+# SoftFP interval in r2/r3 and target/selector/info/repeats in four stack words.
+for misalignment in (0,4):
+    uc=Uc(UC_ARCH_ARM,UC_MODE_ARM)
+    uc.mem_map(BASE,0x10000);uc.mem_write(BASE,code)
+    uc.mem_map(STACK,0x10000);uc.mem_map(STOP,0x1000);uc.mem_map(SELF,0x1000)
+    sp=STACK+0x8000+misalignment
+    uc.reg_write(UC_ARM_REG_SP,sp);uc.reg_write(UC_ARM_REG_LR,STOP)
+    uc.reg_write(UC_ARM_REG_R9,0x12345678)
+    uc.mem_write(0x601f0,struct.pack('<I',1));uc.mem_write(0x601f8,struct.pack('<I',1))
+    args=[SELF,SEL,0x11111111,0x3f911111,0x70001,0x70002,0,1]
+    for reg,value in zip((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3),args):uc.reg_write(reg,value)
+    uc.mem_write(sp,struct.pack('<20I',*(args[4:]+[0]*16)))
+    uc.emu_start(symbols['im2_objc_msgSend_entry'],STOP,count=1000)
+    assert uc.reg_read(UC_ARM_REG_PC)==STOP and uc.reg_read(UC_ARM_REG_SP)==sp
+    assert uc.reg_read(UC_ARM_REG_R9)==0x12345678
+    assert list(struct.unpack('<8I',uc.mem_read(RESULT,32)))==args
+    assert uc.reg_read(UC_ARM_REG_R0)==0x12340000
+    checks+=1
 print(json.dumps(dict(cases=checks,production_assembly_executed=True,physical_vita_verified=False,original_game_executed=False)))

@@ -116,6 +116,11 @@ fail:
     launching=0;
     return IM2_UIKIT_BOOT_INVALID;
 }
+int im2_uikit_launch_finish_pool(void) {
+    if(!launched || !launch_pool)return -1;
+    if(im2_objc_pool_drain(launch_pool))return -1;
+    launch_pool=NULL;return 0;
+}
 int im2_uikit_launch_release_delegate(void) {
     if(!launched || !launch_delegate)return -1;
     Im2ObjcClass *app_class=im2_objc_class_named("UIApplication");
@@ -127,10 +132,7 @@ int im2_uikit_launch_release_delegate(void) {
         return -1;
     /* Drain Cocoa temporaries created by the guest callback before releasing
      * the launch-owned delegate. Runtime pool ordering is thread-local. */
-    if(!launch_pool)return -1;
-    void *pool=launch_pool;
-    launch_pool=NULL;
-    if(im2_objc_pool_drain(pool))return -1;
+    if(launch_pool && im2_uikit_launch_finish_pool())return -1;
     if(im2_objc_retain_count(launch_delegate)>0 &&
        im2_objc_release(launch_delegate))return -1;
     launch_delegate=NULL;launched=0;

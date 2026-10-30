@@ -143,7 +143,7 @@ int im2_objc_lookup_target(const void *receiver,const char *selector,
         }
         if(!entry) return -1;
         for(size_t i=0;i<methods->count;i++) if(!strcmp(selector,methods->methods[i].name)) {
-            *target=(Im2ObjcTarget){methods->methods[i].imp,sizes[i],entry->guest};return 0;
+            *target=(Im2ObjcTarget){methods->methods[i].imp,sizes[i],entry->guest,methods->methods[i].types};return 0;
         }
         cls=im2_objc_class_metadata(cls)->superclass;
     }

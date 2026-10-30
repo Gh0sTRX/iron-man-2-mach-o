@@ -8,10 +8,15 @@ ml_unimpl_log: bx lr
 .global im2_objc_lookup_super_words
 im2_objc_lookup_words:
 im2_objc_lookup_super_words:
+    ldr ip, =0x601f8
+    ldr ip, [ip]
+    cmp ip, #1
+    ldreq r0, =test_timer_word_imp
+    beq 1f
     cmp r2, #0
     ldreq r0, =test_word_imp
     ldrne r0, =test_struct_imp
-    ldr ip, =0x601f0
+1:  ldr ip, =0x601f0
     ldr r1, [ip]
     bx lr
 .global test_word_imp
@@ -54,4 +59,21 @@ test_arm_guest6:
 .type test_thumb_guest,%function
 test_thumb_guest:
     adds r0, r0, r1
+    bx lr
+
+.arm
+.global test_timer_word_imp
+.type test_timer_word_imp,%function
+test_timer_word_imp:
+    ldr ip, =0x60200
+    stmia ip!, {r0-r3}
+    ldr r0, [sp]
+    str r0, [ip], #4
+    ldr r0, [sp, #4]
+    str r0, [ip], #4
+    ldr r0, [sp, #8]
+    str r0, [ip], #4
+    ldr r0, [sp, #12]
+    str r0, [ip], #4
+    ldr r0, =0x12340000
     bx lr

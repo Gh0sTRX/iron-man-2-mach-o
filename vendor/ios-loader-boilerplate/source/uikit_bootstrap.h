@@ -21,5 +21,8 @@ int im2_uikit_launch_once(int argc,char *const *argv,
     void *principal_class_name,void *delegate_class_name,
     Im2UIKitGuestCall guest_bridge);
 
+/* Drains launch temporaries before entering per-turn pools, keeping delegate alive. */
+int im2_uikit_launch_finish_pool(void);
+
 /* Owner of the initialized guest delegate; teardown for tests/exit. */
 int im2_uikit_launch_release_delegate(void);

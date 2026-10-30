@@ -38,6 +38,8 @@ add_library(im2_ios_loader_objects OBJECT
   source/uikit_hierarchy.c
   source/uikit_application.c
   source/uikit_bootstrap.c
+  source/uikit_loop.c
+  source/timers.c
   source/uikit_screen.c
   source/eagl_bridge.c
   source/objc_runtime.c

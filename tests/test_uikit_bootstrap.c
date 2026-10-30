@@ -87,6 +87,14 @@ int main(void) {
     assert(app_at_launch && im2_objc_object_class(app_at_launch)==guest);
     assert(im2_uikit_launch_once(1,argv,NULL,name,fake_guest_call)==IM2_UIKIT_BOOT_INVALID);
     assert(callbacks==1);
+    void *nested=im2_objc_alloc(im2_objc_class_named("NSAutoreleasePool"),NULL);
+    assert(nested && !im2_objc_pool_push(nested));
+    assert(im2_uikit_launch_finish_pool()); /* Keep ownership on out-of-order failure. */
+    assert(im2_objc_retain_count(callback_temporary)==1);
+    assert(!im2_objc_pool_drain(nested));
+    assert(!im2_uikit_launch_finish_pool());
+    assert(im2_objc_retain_count(callback_temporary)==0);
+    assert(im2_uikit_launch_finish_pool());
     assert(!im2_uikit_launch_release_delegate());
     assert(im2_objc_retain_count(callback_temporary)==0);
     assert(!send0(app,"delegate"));

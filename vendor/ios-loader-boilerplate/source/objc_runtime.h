@@ -46,7 +46,7 @@ int im2_objc_pool_drain(void *pool_object);
 
 /* Sidecar metadata preserves foreign class identity; guest class bytes are never rewritten. */
 const Im2ObjcClass *im2_objc_class_metadata(const void *identity);
-typedef struct { Im2Imp imp; size_t stret_size; int guest; } Im2ObjcTarget;
+typedef struct { Im2Imp imp; size_t stret_size; int guest; const char *types; } Im2ObjcTarget;
 int im2_objc_lookup_target(const void *receiver,const char *selector,
     const void *current_class,Im2ObjcTarget *target);
 Im2ObjcClass *im2_objc_register_foreign_class(const char *name,void *identity,void *meta,

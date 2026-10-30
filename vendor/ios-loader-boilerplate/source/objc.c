@@ -28,13 +28,18 @@
 #include "uikit_bootstrap.h"
 #include "eagl_bridge.h"
 #include "gles.h"
+#include "timers.h"
+#include "uikit_loop.h"
+#include "input.h"
+#include <psp2/kernel/processmgr.h>
+#include <psp2/kernel/threadmgr.h>
 #include "darwin.h"
 
 // ---------------------------------------------------------------- NSString
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[53];
+static import_entry class_imports[55];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -61,15 +66,16 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_UIScreen","_OBJC_METACLASS_$_UIScreen",
         "_OBJC_CLASS_$_CALayer","_OBJC_METACLASS_$_CALayer",
         "_OBJC_CLASS_$_CAEAGLLayer","_OBJC_METACLASS_$_CAEAGLLayer",
-        "_OBJC_CLASS_$_EAGLContext","_OBJC_METACLASS_$_EAGLContext"};
-    for(size_t i=0;i<52;i++) {
+        "_OBJC_CLASS_$_EAGLContext","_OBJC_METACLASS_$_EAGLContext",
+        "_OBJC_CLASS_$_NSTimer","_OBJC_METACLASS_$_NSTimer"};
+    for(size_t i=0;i<54;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[52]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[54]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -391,6 +397,7 @@ uint64_t im2_objc_lookup_super_words(const void *frame,const char *selector,uint
     void *const *words=frame;
     return lookup_target_words(words[0],selector,stret,words[1]);
 }
+static uint64_t timer_now_us(void *context){(void)context;return sceKernelGetProcessTimeWide();}
 #define METHOD(sel,types,imp) {sel,types,(Im2Imp)(imp),0}
 void objc_init(void) {
     if(string_class) return;
@@ -420,11 +427,12 @@ void objc_init(void) {
     if(im2_eagl_set_backend((Im2EaglBackend){
         gles_eagl_ready,gles_eagl_storage,gles_eagl_present
     }))fatal_error("EAGL native graphics backend unavailable");
+    if(im2_timers_init(root,(Im2TimerConfig){timer_now_us,NULL,call_guest,foundation_failure}))fatal_error("NSTimer scheduler registration failed");
     bind_class_imports();
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<53;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<55;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 
@@ -449,6 +457,8 @@ static void *ns_class_from_string(void *string) {
 /* Real owner _main passes nil principal class and the CFString "AppController".
  * Dispatch the actual registered legacy delegate callback. UIApplicationMain
  * cannot return success until a real UIKit event/render loop exists. */
+static int loop_poll(void *context){(void)context;input_poll();ime_poll();return 0;}
+static int loop_wait(void *context,uint32_t us){(void)context;return sceKernelDelayThread(us)<0?-1:0;}
 static int ui_application_main(int argc,char *const *argv,
     void *principal_class_name,void *delegate_class_name) {
     const char *delegate=im2_string_utf8(delegate_class_name);
@@ -456,8 +466,13 @@ static int ui_application_main(int argc,char *const *argv,
         delegate?delegate:"<unregistered>",argc);
     int result=im2_uikit_launch_once(argc,argv,principal_class_name,
         delegate_class_name,call_guest);
-    if(result==IM2_UIKIT_BOOT_NEEDS_RUN_LOOP)
-        fatal_error("Legacy UIKit delegate launch executed, but the Vita run loop / render pipeline is not implemented");
+    if(result==IM2_UIKIT_BOOT_NEEDS_RUN_LOOP){
+        if(!im2_timers_scheduled())fatal_error("UIKit launch registered no supported scheduled timers; refusing an empty rendering loop");
+        if(im2_uikit_launch_finish_pool())fatal_error("UIKit launch autorelease-pool drain failed");
+        l_info("Entering main-thread NSTimer loop; UIKit touch delivery and additional CFRunLoop sources remain incomplete");
+        (void)im2_uikit_loop_run(&(Im2UIKitLoop){NULL,loop_poll,loop_wait,NULL,10000});
+        fatal_error("Vita timer loop stopped or rejected unsupported scheduler state");
+    }
     fatal_error("UIApplicationMain refused invalid/unsupported delegate or startup ABI");
 }
 static void enumeration_mutation(void *object) {

@@ -62,5 +62,11 @@ assert "target !=IM2_GL_RENDERBUFFER_OES" in eagl or "target!=IM2_GL_RENDERBUFFE
 
 
 
+assert '"_OBJC_CLASS_$_NSTimer"' in src, 'Missing real NSTimer class import'
+assert "im2_timers_init(root," in src, 'Timer scheduler not initialized before guest load'
+assert "source/timers.c" in cmake and "source/uikit_loop.c" in cmake
+assert "tests/test_timers.c" in runner
+assert "im2_uikit_loop_run(" in src, 'UIApplicationMain must enter the native timer driver'
+
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)

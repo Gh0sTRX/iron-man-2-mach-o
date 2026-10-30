@@ -142,3 +142,13 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -I vendor/ios-loader-boilerplate/source tests/test_gles_oes.c \
   vendor/ios-loader-boilerplate/source/gles_oes.c -o build/host-runtime/test_gles_oes
 build/host-runtime/test_gles_oes
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -no-pie -pthread -I vendor/ios-loader-boilerplate/source tests/test_timers.c \
+  vendor/ios-loader-boilerplate/source/timers.c \
+  vendor/ios-loader-boilerplate/source/uikit_loop.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -lm -o build/host-runtime/test_timers
+build/host-runtime/test_timers
