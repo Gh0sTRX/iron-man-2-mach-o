@@ -51,6 +51,14 @@ assert "im2_eagl_init(root,foundation_failure)" in src, "Original EAGL classes n
 assert "gles_eagl_ready,gles_eagl_storage,gles_eagl_present" in src, "VitaGL EAGL callback not wired"
 assert "source/eagl_bridge.c" in cmake, "EAGL classes not linked into Vita ARM loader"
 assert "tests/test_eagl_bridge.c" in runner, "EAGL native host ABI tests absent"
+imports=(base/"vendor/ios-loader-boilerplate/source/imports.c").read_text()
+assert "{eagl_imports, &eagl_imports_count}" in imports, "EAGL data imports not routed through actual loader"
+eagl=(base/"vendor/ios-loader-boilerplate/source/eagl_bridge.c").read_text()
+for expected in ("_kEAGLColorFormatRGB565",
+    "_kEAGLDrawablePropertyColorFormat","_kEAGLDrawablePropertyRetainedBacking"):
+    assert expected in eagl, ("Missing owner EAGL NSString data symbol",expected)
+assert "target !=IM2_GL_RENDERBUFFER_OES" in eagl or "target!=IM2_GL_RENDERBUFFER_OES" in eagl, "Unsupported renderbuffer target not rejected"
+
 
 
 
