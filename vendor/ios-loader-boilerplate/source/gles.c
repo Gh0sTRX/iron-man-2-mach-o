@@ -33,6 +33,7 @@
 #define GL_RENDERBUFFER_HEIGHT_OES 0x8D43
 
 static GLuint fbo, fbo_tex;
+static int fbo_ready;
 
 // Cached state overwritten during blit that glGet cannot fully query:
 typedef struct {
@@ -193,11 +194,31 @@ void gles_init(void) {
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_tex, 0);
+    fbo_ready = fbo && fbo_tex &&
+        glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if(!fbo_ready)
+        l_error("vitaGL virtual 320x480 framebuffer is incomplete; EAGL will refuse presentation");
     glBindTexture(GL_TEXTURE_2D, 0);
     glViewport(0, 0, FB_W, FB_H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
     l_info("vitaGL: FBO %ux%u -> screen %ux%u at x=%d", FB_W, FB_H, DST_W, DST_H, DST_X);
+}
+
+int gles_eagl_ready(void) {
+    return fbo_ready;
+}
+int gles_eagl_storage(uint32_t target) {
+    /* The virtual 320x480 iOS color renderbuffer is stored by the real
+     * vitaGL FBO texture. Never report YES without an allocated attachment. */
+    if(target != 0x8D41u || !fbo_ready)return 0;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    return glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+}
+int gles_eagl_present(uint32_t target) {
+    if(target != 0x8D41u || !gles_eagl_storage(target))return 0;
+    gles_present(); /* Issues the actual VitaGL vglSwapBuffers call. */
+    return 1;
 }
 
 void gles_present(void) {
