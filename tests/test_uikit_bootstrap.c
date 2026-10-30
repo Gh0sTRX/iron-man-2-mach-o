@@ -15,6 +15,7 @@
 static int callbacks;
 static void *expected_imp;
 static void *app_at_launch;
+static void *callback_temporary;
 static uintptr_t root_alloc(void *klass,const char *selector) {
     (void)selector;
     return (uintptr_t)im2_objc_alloc(klass,NULL);
@@ -33,6 +34,8 @@ static uint32_t fake_guest_call(void *imp,uint32_t self,
     assert(self && selector && arg0 && !arg1);
     assert(selector==(uint32_t)(uintptr_t)im2_objc_sel_register("applicationDidFinishLaunching:"));
     callbacks++;
+    callback_temporary=im2_string_create("guest-launch temporary",1);
+    assert(callback_temporary && im2_objc_retain_count(callback_temporary)==1);
     (void)guest_launch;
     return 0;
 }
@@ -50,6 +53,9 @@ int main(void) {
     assert(root);
     Im2FoundationConfig config={"/tmp",NULL,NULL,NULL};
     assert(!im2_foundation_init(root,&config));
+    /* UIApplicationMain owns a launch autorelease pool, including guest code. */
+    assert(im2_objc_register_class("NSAutoreleasePool",root,
+        sizeof(Im2ObjcObject),NULL,0,NULL,0));
     assert(!im2_uikit_hierarchy_init(root,NULL));
     assert(!im2_uikit_application_init(root,NULL));
     Im2ObjcClass *appcls=im2_objc_class_named("UIApplication");
@@ -82,6 +88,7 @@ int main(void) {
     assert(im2_uikit_launch_once(1,argv,NULL,name,fake_guest_call)==IM2_UIKIT_BOOT_INVALID);
     assert(callbacks==1);
     assert(!im2_uikit_launch_release_delegate());
+    assert(im2_objc_retain_count(callback_temporary)==0);
     assert(!send0(app,"delegate"));
     assert(im2_uikit_launch_release_delegate());
 
