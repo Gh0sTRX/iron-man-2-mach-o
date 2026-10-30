@@ -9,6 +9,7 @@
 #include <string.h>
 
 static void *launch_delegate;
+static void *launch_pool;
 static int launching,launched;
 
 static int string_name(void *object,const char **out) {
@@ -54,7 +55,7 @@ static int native_or_guest_send(void *receiver,const char *selector,
 int im2_uikit_launch_once(int argc,char *const *argv,
     void *principal_name,void *delegate_name,
     Im2UIKitGuestCall guest_bridge) {
-    if(launching || launched || argc<0 || (argc && !argv))
+    if(launching || launched || launch_pool || argc<0 || (argc && !argv))
         return IM2_UIKIT_BOOT_INVALID;
     Im2ObjcClass *app_class=im2_objc_class_named("UIApplication");
     if(!app_class)return IM2_UIKIT_BOOT_INVALID;
@@ -68,12 +69,18 @@ int im2_uikit_launch_once(int argc,char *const *argv,
     if(string_name(delegate_name,&delegate_class_name))
         return IM2_UIKIT_BOOT_INVALID;
     Im2ObjcClass *cls=im2_objc_class_named(delegate_class_name);
-    if(!cls || cls==app_class || !im2_objc_class_metadata(cls))
+    Im2ObjcClass *pool_class=im2_objc_class_named("NSAutoreleasePool");
+    if(!cls || cls==app_class || !im2_objc_class_metadata(cls) || !pool_class)
         return IM2_UIKIT_BOOT_INVALID;
     /* Do not call a guest function without an explicit ARM32 call bridge. */
     if(!guest_bridge)return IM2_UIKIT_BOOT_INVALID;
     void *app=NULL,*delegate=NULL,*initialized=NULL;
     launching=1;
+    launch_pool=im2_objc_alloc(pool_class,NULL);
+    if(!launch_pool)goto fail;
+    if(im2_objc_pool_push(launch_pool)) {
+        (void)im2_objc_release(launch_pool);launch_pool=NULL;goto fail;
+    }
     if(native_or_guest_send(app_class,"sharedApplication",NULL,0,
         guest_bridge,&app) || !app)
         goto fail;
@@ -100,6 +107,10 @@ int im2_uikit_launch_once(int argc,char *const *argv,
     return IM2_UIKIT_BOOT_NEEDS_RUN_LOOP;
 fail:
     if(app)(void)native_or_guest_send(app,"setDelegate:",NULL,1,guest_bridge,NULL);
+    if(launch_pool) {
+        void *pool=launch_pool;launch_pool=NULL;
+        (void)im2_objc_pool_drain(pool);
+    }
     if(delegate && im2_objc_retain_count(delegate)>0)
         (void)im2_objc_release(delegate);
     launching=0;
@@ -114,7 +125,14 @@ int im2_uikit_launch_release_delegate(void) {
         return -1;
     if(native_or_guest_send(app,"setDelegate:",NULL,1,NULL,NULL))
         return -1;
-    if(im2_objc_release(launch_delegate))return -1;
+    /* Drain Cocoa temporaries created by the guest callback before releasing
+     * the launch-owned delegate. Runtime pool ordering is thread-local. */
+    if(!launch_pool)return -1;
+    void *pool=launch_pool;
+    launch_pool=NULL;
+    if(im2_objc_pool_drain(pool))return -1;
+    if(im2_objc_retain_count(launch_delegate)>0 &&
+       im2_objc_release(launch_delegate))return -1;
     launch_delegate=NULL;launched=0;
     return 0;
 }
