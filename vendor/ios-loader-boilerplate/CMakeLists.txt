@@ -42,6 +42,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/timers.c
   source/numbers.c
   source/defaults.c
+  source/cfbundle.c
   source/uikit_screen.c
   source/eagl_bridge.c
   source/objc_runtime.c

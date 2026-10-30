@@ -74,3 +74,16 @@ for name in ('glGenFramebuffersOES','glGenRenderbuffersOES','glBindFramebufferOE
              'glGetIntegerv','glGetError'):
     assert gles_entries['_'+name]==(symbols['g_'+name],0),name
 print('PASS: linked OES imports reach actual resource-mapping wrappers, not no-op callbacks')
+
+cf_count=struct.unpack('<I',read(symbols['cfbundle_imports_count'],4))[0]
+assert cf_count==5
+cf={}
+for i in range(cf_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['cfbundle_imports']+12*i,12))
+    cf[cstring(name)]=(target,kind)
+assert set(cf)=={'_CFBundleGetMainBundle','_CFBundleCopyBundleURL',
+                 '_CFBundleCopyResourcesDirectoryURL','_CFURLCopyFileSystemPath',
+                 '_CFURLGetFileSystemRepresentation'}
+assert all(target and kind==0 for target,kind in cf.values())
+assert cf['_CFBundleCopyBundleURL']==cf['_CFBundleCopyResourcesDirectoryURL']
+print('PASS: linked CFBundle/CFURL imports are real function entries with flat iOS resource-root alias')

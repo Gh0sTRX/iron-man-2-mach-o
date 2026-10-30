@@ -58,6 +58,10 @@ static void destroy_url(void *object) {
     free(u->absolute);free(u->scheme);free(u->path);
     u->absolute=u->scheme=u->path=NULL;
 }
+/* Vita mount paths are absolute on the host filesystem. Keep them distinct
+ * from remote file:// authorities and arbitrary relative iOS paths. */
+static int vita_absolute(const char *p){return p && (!strncmp(p,"ux0:",4) || !strncmp(p,"ur0:",4) || !strncmp(p,"app0:",5));}
+static int absolute_file(const char *p){return p && (p[0]=='/' || vita_absolute(p));}
 static int url_assign(Im2URL *u,const char *text) {
     if(!text)return -1;
     size_t n=strlen(text);
@@ -93,13 +97,15 @@ static int url_assign(Im2URL *u,const char *text) {
     }
     char *path=decode_path(start,(size_t)(end-start));
     if(!path){free(absolute);free(scheme);return -1;}
+    if(!strcmp(scheme,"file") && path[0]=='/' && vita_absolute(path+1))memmove(path,path+1,strlen(path));
     destroy_url(u);
     u->absolute=absolute;u->scheme=scheme;u->path=path;
     return 0;
 }
 static int url_assign_file(Im2URL *u,const char *path) {
-    if(!path || path[0]!='/')return -1;
-    size_t n=strlen(path),needed=7u;
+    if(!absolute_file(path))return -1;
+    size_t prefix=vita_absolute(path)?8u:7u;
+    size_t n=strlen(path),needed=prefix;
     if(n>URL_LIMIT-7u)return -1;
     for(size_t i=0;i<n;i++) {
         unsigned char c=(unsigned char)path[i];
@@ -108,8 +114,8 @@ static int url_assign_file(Im2URL *u,const char *path) {
     }
     char *encoded=malloc(needed+1u);
     if(!encoded)return -1;
-    memcpy(encoded,"file://",7);
-    size_t out=7;
+    memcpy(encoded,"file:///",prefix);
+    size_t out=prefix;
     static const char digits[]="0123456789ABCDEF";
     for(size_t i=0;i<n;i++) {
         unsigned char c=(unsigned char)path[i];
@@ -126,9 +132,16 @@ const char *im2_url_local_file_path(const void *obj) {
     /* Never dereference arbitrary guest pointers or treat remote URLs as paths. */
     if(!url_class || im2_objc_object_class(obj)!=url_class)return NULL;
     const Im2URL *u=obj;
-    if(!u->scheme || strcmp(u->scheme,"file") || !u->path || u->path[0]!='/')
+    if(!u->scheme || strcmp(u->scheme,"file") || !absolute_file(u->path))
         return NULL;
     return u->path;
+}
+void *im2_url_create_file(const char *path,int autorelease){
+    uint32_t units;
+    if(!url_class || !path || im2_utf8_utf16_length(path,strlen(path),&units))return NULL;
+    Im2URL *u=im2_objc_alloc(url_class,destroy_url);if(!u)return NULL;
+    if(url_assign_file(u,path)){im2_objc_release(u);return NULL;}
+    if(autorelease && !im2_objc_autorelease(u)){im2_objc_release(u);return NULL;}return u;
 }
 static uintptr_t init_string(Im2URL *self,const char *selector,void *string) {
     (void)selector;

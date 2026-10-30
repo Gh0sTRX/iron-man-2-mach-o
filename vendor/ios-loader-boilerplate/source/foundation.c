@@ -259,3 +259,6 @@ int im2_foundation_register_cfstrings(uint32_t address,size_t count,Im2GuestRead
     void *context,char *error,size_t error_size) {
     return im2_cfstrings_register(address,count,strings,read,context,error,error_size);
 }
+
+void *im2_bundle_main(void){return main_bundle;}
+const char *im2_bundle_path(const void *o){return kind_of(o,bundles)?((const Bundle *)o)->path:NULL;}

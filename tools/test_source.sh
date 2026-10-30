@@ -164,3 +164,13 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_numbers_defaults
 build/host-runtime/test_numbers_defaults
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_cfbundle.c \
+  vendor/ios-loader-boilerplate/source/cfbundle.c \
+  vendor/ios-loader-boilerplate/source/imports.c \
+  vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c \
+  vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_cfbundle
+build/host-runtime/test_cfbundle

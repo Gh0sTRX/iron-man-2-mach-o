@@ -31,3 +31,7 @@ char *im2_bundle_resource_path(const char *name,const char *extension,const char
 #include "objc_guest.h"
 int im2_foundation_register_cfstrings(uint32_t address,size_t count,Im2GuestRead read,
     void *context,char *error,size_t error_size);
+
+/* Borrowed bundle identity/path for our opaque CFBundle adapter; not generic CF type bridging. */
+void *im2_bundle_main(void);
+const char *im2_bundle_path(const void *bundle);

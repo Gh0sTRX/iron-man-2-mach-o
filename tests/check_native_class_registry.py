@@ -73,5 +73,8 @@ assert "source/numbers.c" in cmake and "source/defaults.c" in cmake
 assert "tests/test_numbers_defaults.c" in runner
 assert "sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG" in src
 
+assert "source/cfbundle.c" in cmake and "tests/test_cfbundle.c" in runner
+assert "{cfbundle_imports, &cfbundle_imports_count}" in imports
+
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)

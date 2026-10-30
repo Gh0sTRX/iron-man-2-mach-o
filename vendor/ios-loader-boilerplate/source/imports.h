@@ -42,6 +42,9 @@ extern const int eagl_imports_count;
 extern const import_entry patch_imports[];
 extern const int patch_imports_count;
 
+extern const import_entry cfbundle_imports[];
+extern const int cfbundle_imports_count;
+
 // iOS ARM SoftFP calling convention: float and double arguments pass in integer registers (r0..r3).
 // Because VitaSDK targets hardfp by default, any imported function that passes or returns floats
 // must be decorated with this attribute.
