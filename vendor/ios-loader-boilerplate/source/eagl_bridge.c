@@ -130,7 +130,7 @@ static uint32_t context_present(void *receiver,const char *sel,uint32_t target) 
     return backend.present(target)?1u:0u;
 }
 
-static uintptr_t eagl_layer_for_view(void *owner) {
+static void *eagl_layer_for_view(void *owner) {
     /* Only the original EAGLView needs a CAEAGLLayer backing. Other UIView
      * objects use CALayer; the guest's +layerClass is not replaced. */
     const Im2ObjcClass *meta=im2_objc_class_metadata(im2_objc_object_class(owner));
@@ -138,7 +138,7 @@ static uintptr_t eagl_layer_for_view(void *owner) {
         meta->data->ro->name:NULL;
     Im2ObjcClass *cls=name && !strcmp(name,"EAGLView")?
         eagl_layer_class:calayer_class;
-    return (uintptr_t)im2_objc_alloc(cls,layer_destroy);
+    return im2_objc_alloc(cls,layer_destroy);
 }
 
 int im2_eagl_set_backend(Im2EaglBackend selected) {
@@ -183,7 +183,7 @@ int im2_eagl_init(Im2ObjcClass *root,void (*failure)(const char *)) {
     color_format_key=im2_string_create("EAGLDrawablePropertyColorFormat",0);
     rgb565_value=im2_string_create("EAGLColorFormatRGB565",0);
     if(!retained_backing || !color_format_key || !rgb565_value)goto fail;
-    if(im2_uikit_bind_layer_factory((void *(*)(void *))eagl_layer_for_view))
+    if(im2_uikit_bind_layer_factory(eagl_layer_for_view))
         goto fail;
     return 0;
 fail:
