@@ -41,6 +41,19 @@ static Im2Rect32 get_rect(void *view,const char *selector) {
         &out,view,selector);
     return out;
 }
+static void expect_invalid_subview(void *parent,void *child) {
+    pid_t pid=fork();
+    assert(pid>=0);
+    if(!pid) {
+        const char *sel="addSubview:";
+        ((void(*)(void *,const char *,void *))method(parent,sel))(
+            parent,sel,child);
+        _exit(74);
+    }
+    int status=0;
+    assert(waitpid(pid,&status,0)==pid);
+    assert(WIFEXITED(status) && WEXITSTATUS(status)==73);
+}
 static void set_hidden(void *view,int value) {
     const char *sel="setHidden:";
     ((void(*)(void *,const char *,int))method(view,sel))(view,sel,value);
@@ -156,6 +169,8 @@ int main(void) {
     assert(!message_obj0(child,"window"));
     message_void1(window,"addSubview:",parent);
     assert(message_obj0(child,"window")==window);
+    expect_invalid_subview(child,window); /* ancestor cycle */
+    expect_invalid_subview(window,window); /* self-attachment */
     assert(im2_objc_retain_count(parent)==2);
     message_void0(child,"removeFromSuperview");
     assert(im2_objc_retain_count(child)==1);
