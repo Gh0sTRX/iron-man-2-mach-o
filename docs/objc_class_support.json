@@ -1,5 +1,5 @@
 {
-  "note": "Original classrefs count 64. UIScreen now supports only mainScreen/bounds (320x480 compatibility assumption; native CGRect stret size 16). UIKit launch autorelease pool, UIView frame/bounds and Info.plist hidden status bar are partial; native Vita runtime, rendering and real game boot remain unverified.",
+  "note": "Owner original Mach-O external classref inventory (64 names). EAGLContext and CAEAGLLayer have native ObjC identities, retained state, and checked vitaGL FBO callbacks; neither full GL ES framebuffer/renderbuffer behavior nor original Vita guest execution is proven. CALayer is an additional implementation superclass, not one of the original 64 external classref symbols.",
   "classes": [
     {
       "name": "NSString",
@@ -172,7 +172,7 @@
     {
       "name": "EAGLContext",
       "source_classref_slots": 2,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
@@ -242,7 +242,7 @@
     {
       "name": "CAEAGLLayer",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
