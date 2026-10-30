@@ -36,6 +36,9 @@ extern const int coreaudio_imports_count;
 extern const import_entry objc_imports[];
 extern const int objc_imports_count;
 
+extern const import_entry eagl_imports[];
+extern const int eagl_imports_count;
+
 extern const import_entry patch_imports[];
 extern const int patch_imports_count;
 
