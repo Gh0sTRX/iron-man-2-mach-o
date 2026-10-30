@@ -62,7 +62,7 @@ int main(void) {
     assert(!send0(app,"delegate"));
     assert(!send0(app,"keyWindow"));
     assert(get_uint(app,"statusBarOrientation")==1);
-    assert(get_uint(app,"isStatusBarHidden")==0);
+    assert(get_uint(app,"isStatusBarHidden")==1); /* Owner Info.plist hides it. */
 
     void *delegate=im2_objc_alloc(root,NULL);
     assert(delegate);
