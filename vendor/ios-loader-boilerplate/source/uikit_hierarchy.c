@@ -86,6 +86,22 @@ int im2_uikit_view_frame(const void *receiver,Im2Rect32 *out) {
     if(!s || !s->frame_valid)return -1;
     *out=s->frame;return 0;
 }
+/* CGRect methods use the ARM32 objc_msgSend_stret hidden return pointer.
+ * The guest frame and bounds are distinct: bounds has a local (0,0) origin. */
+static void view_get_frame(Im2Rect32 *out,void *self,const char *selector) {
+    (void)selector;
+    if(!out || !kind_of(self,view))fail("UIView frame receiver invalid");
+    UiState *s=state_for(self,0);
+    if(!s || !s->frame_valid)fail("UIView frame requested before initialization");
+    *out=s->frame;
+}
+static void view_get_bounds(Im2Rect32 *out,void *self,const char *selector) {
+    (void)selector;
+    if(!out || !kind_of(self,view))fail("UIView bounds receiver invalid");
+    UiState *s=state_for(self,0);
+    if(!s || !s->frame_valid)fail("UIView bounds requested before initialization");
+    *out=(Im2Rect32){0.f,0.f,s->frame.width,s->frame.height};
+}
 static void view_set_hidden(void *self,const char *selector,int hidden) {
     (void)selector;
     if(!kind_of(self,view))fail("setHidden: receiver is not UIView");
@@ -158,6 +174,8 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
     const Im2MethodSpec vm[]={
         METHOD("initWithFrame:","@@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_init_frame),
         METHOD("setFrame:","v@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_set_frame),
+        {"frame","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_frame,sizeof(Im2Rect32)},
+        {"bounds","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_bounds,sizeof(Im2Rect32)},
         METHOD("setHidden:","v@:c",view_set_hidden),
         METHOD("isHidden","c@:",view_hidden),
         METHOD("setTag:","v@:i",view_set_tag),
