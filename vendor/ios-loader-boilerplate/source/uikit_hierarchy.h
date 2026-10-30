@@ -5,6 +5,13 @@
 #pragma once
 #include "objc_runtime.h"
 
+/* Darwin passes CGRect arguments in core registers/stack, not VFP HFA registers. */
+#if defined(__arm__)
+#define IM2_UIKIT_PCS __attribute__((pcs("aapcs")))
+#else
+#define IM2_UIKIT_PCS
+#endif
+
 /* iOS ARM32 CGFloat=float, CGPoint=(float,float), CGRect=(CGPoint,CGSize). */
 typedef struct {float x,y,width,height;} Im2Rect32;
 
@@ -24,3 +31,12 @@ int im2_uikit_bind_window_activation(int (*activate)(void *window));
  * The UIView sidecar takes ownership of the returned +1 object. */
 int im2_uikit_bind_layer_factory(void *(*create)(void *view));
 
+
+/* Main-thread translation-only touch routing. Affine transforms are unsupported. */
+typedef struct {float x,y;} Im2Point32;
+void *im2_uikit_hit_test(void *window,Im2Point32 point);
+void *im2_uikit_view_parent(void *view);
+int im2_uikit_view_origin(void *view,void *window,Im2Point32 *origin);
+int im2_uikit_view_visible(void *view,void *window);
+
+int im2_uikit_view_accepts_multiple(void *view);

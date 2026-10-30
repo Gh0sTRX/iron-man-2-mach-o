@@ -1,8 +1,8 @@
 {
   "original_imports": 490,
-  "loader_table_names": 321,
-  "matched_original_imports": 216,
-  "unresolved_original_imports": 274,
+  "loader_table_names": 327,
+  "matched_original_imports": 217,
+  "unresolved_original_imports": 273,
   "unresolved_symbols": [
     "_CC_MD5",
     "_CFAbsoluteTimeGetCurrent",
@@ -56,7 +56,6 @@
     "_OBJC_CLASS_$_NSPredicate",
     "_OBJC_CLASS_$_NSRunLoop",
     "_OBJC_CLASS_$_NSScanner",
-    "_OBJC_CLASS_$_NSSet",
     "_OBJC_CLASS_$_NSThread",
     "_OBJC_CLASS_$_NSURLConnection",
     "_OBJC_CLASS_$_SKPayment",
@@ -281,7 +280,7 @@
   ],
   "note": "Name coverage only: not implementation correctness, Vita linkage or runtime readiness",
   "date_istanbul": "2026-10-31",
-  "scope": "Static import/class name inventory; no original native Vita execution or behavior percentage",
+  "scope": "Static name inventory; not runtime correctness or completion percentage",
   "partial_external_classes": [
     "NSString",
     "NSAutoreleasePool",
@@ -297,6 +296,7 @@
     "EAGLContext",
     "NSFileManager",
     "NSMutableURLRequest",
+    "NSSet",
     "UIViewController",
     "CAEAGLLayer",
     "NSArray",
@@ -324,7 +324,6 @@
     "SKPaymentQueue",
     "MPMusicPlayerController",
     "NSMutableString",
-    "NSSet",
     "UITableView",
     "UITableViewCell",
     "UITextView",
@@ -350,6 +349,6 @@
     "UITextField",
     "UIWebView"
   ],
-  "original_native_vita_execution_verified": false,
-  "physical_vita_verified": false
+  "physical_vita_verified": false,
+  "original_native_vita_execution_verified": false
 }

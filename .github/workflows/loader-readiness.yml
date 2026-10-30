@@ -23,7 +23,7 @@ jobs:
           docker run --rm --network none --user "$(id -u):$(id -g)" \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
             vitasdk/vitasdk@sha256:8227da1b596d981f4513cd9b36bda1e43857f6dae5bcf4312c1cd40167f7d9bb \
-            bash -c 'set -e; bash tools/build_loader_elf.sh; bash tools/build_arm_dispatch_test.sh'
+            bash -c 'set -e; bash tools/build_loader_elf.sh; bash tools/build_arm_dispatch_test.sh; bash tools/build_arm_uikit_abi_test.sh'
       - name: Inspect ABI routing in the actual linked ARM import table
         run: python3 tests/test_elf_imports.py --elf build/loader-full/im2_ios_loader
       - name: Execute real ARM and Thumb assembly with synthetic inputs
@@ -32,6 +32,8 @@ jobs:
           build/arm-test-python/bin/pip install unicorn==2.1.4
           build/arm-test-python/bin/python tests/test_arm_dispatch.py \
             --binary build/arm-dispatch/glue.bin --symbols build/arm-dispatch/symbols.txt
+          build/arm-test-python/bin/python tests/test_arm_uikit_abi.py \
+            --binary build/arm-uikit/uikit.bin --symbols build/arm-uikit/symbols.txt
       - name: VPK remains blocked by missing runtime and hardware evidence
         run: |
           if python3 tools/check_vpk_release_gates.py --evidence docs/vpk_release_evidence.json; then

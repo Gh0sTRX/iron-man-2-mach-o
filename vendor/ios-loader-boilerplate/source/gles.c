@@ -15,19 +15,20 @@
 
 #include "gles.h"
 #include "gles_oes.h"
+#include "display_geometry.h"
 #include "hle.h"
 #include "imports.h"
 #include "objc.h"
 #include "log.h"
 
-#define FB_W 320
-#define FB_H 480
-#define SCR_W 960
-#define SCR_H 544
+#define FB_W IM2_FB_WIDTH
+#define FB_H IM2_FB_HEIGHT
+#define SCR_W IM2_SCREEN_WIDTH
+#define SCR_H IM2_SCREEN_HEIGHT
 // Destination rectangle: 480x320 scaled to Vita screen height (1.7x) and centered horizontally.
-#define DST_H SCR_H
-#define DST_W (DST_H * FB_H / FB_W)
-#define DST_X ((SCR_W - DST_W) / 2)
+#define DST_H IM2_PRESENT_HEIGHT
+#define DST_W IM2_PRESENT_WIDTH
+#define DST_X IM2_PRESENT_X
 
 #define GL_FRAMEBUFFER_COMPLETE_OES 0x8CD5
 #define GL_RENDERBUFFER_WIDTH_OES 0x8D42

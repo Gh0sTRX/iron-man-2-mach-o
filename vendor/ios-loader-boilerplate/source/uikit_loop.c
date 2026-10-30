@@ -3,10 +3,13 @@
 #include "timers.h"
 static int valid(const Im2UIKitLoop *p){return p && p->poll && p->wait_us && p->max_wait_us && p->max_wait_us<=1000000;}
 int im2_uikit_loop_turn(const Im2UIKitLoop *p){
- if(!valid(p) || p->poll(p->context))return -1;
- size_t fired;uint32_t delay;
- if(im2_timers_poll(&fired) || im2_timers_delay(p->max_wait_us,&delay))return -1;
- return delay?p->wait_us(p->context,delay):0;
+ if(!valid(p))return -1;
+ void *pool=im2_objc_alloc(im2_objc_class_named("NSAutoreleasePool"),NULL);if(!pool)return -1;
+ if(im2_objc_pool_push(pool)){im2_objc_release(pool);return -1;}
+ size_t fired;uint32_t delay=0;
+ int result=p->poll(p->context) || im2_timers_poll(&fired) || im2_timers_delay(p->max_wait_us,&delay)?-1:0;
+ if(im2_objc_pool_drain(pool))result=-1;
+ return result?result:delay?p->wait_us(p->context,delay):0;
 }
 int im2_uikit_loop_run(const Im2UIKitLoop *p){
  if(!valid(p))return -1;

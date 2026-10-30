@@ -5,6 +5,7 @@
  */
 #include "uikit_hierarchy.h"
 #include <pthread.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +27,7 @@ typedef struct UiState {
     void *parent; /* non-owning; parent retains each child through UiChild */
     UiChild *children;
     int hidden,tag,frame_valid,bounds_valid,needs_layout,needs_display;
+    int interaction_enabled,multiple_touch_enabled;
     struct UiState *next;
 } UiState;
 
@@ -48,7 +50,7 @@ static UiState *state_for(void *owner,int create) {
     while(s && s->owner!=owner)s=s->next;
     if(!s && create) {
         s=calloc(1,sizeof(*s));
-        if(s){s->owner=owner;s->next=states;states=s;}
+        if(s){s->owner=owner;s->interaction_enabled=1;s->next=states;states=s;}
     }
     pthread_mutex_unlock(&state_lock);
     if(!s && create)fail("UIKit state allocation failed");
@@ -88,7 +90,7 @@ static int kind_of(const void *o,Im2ObjcClass *klass) {
     return 0;
 }
 /* Use a sidecar: never reinterpret unverified guest UIKit ivar bytes. */
-static uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame) {
+static IM2_UIKIT_PCS uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame) {
     (void)selector;
     if(!kind_of(self,view))fail("initWithFrame: receiver is not UIView");
     UiState *s=state_for(self,1);
@@ -97,7 +99,7 @@ static uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame
     if(kind_of(self,window_class))s->hidden=1;
     return (uintptr_t)self;
 }
-static void view_set_frame(void *self,const char *selector,Im2Rect32 frame) {
+static IM2_UIKIT_PCS void view_set_frame(void *self,const char *selector,Im2Rect32 frame) {
     (void)selector;
     if(!kind_of(self,view))fail("setFrame: receiver is not UIView");
     UiState *s=state_for(self,1);s->frame=frame;s->frame_valid=1;
@@ -127,7 +129,7 @@ static void view_get_bounds(Im2Rect32 *out,void *self,const char *selector) {
     if(!s || !s->bounds_valid)fail("UIView bounds requested before initialization");
     *out=s->bounds;
 }
-static void view_set_bounds(void *self,const char *selector,Im2Rect32 bounds) {
+static IM2_UIKIT_PCS void view_set_bounds(void *self,const char *selector,Im2Rect32 bounds) {
     (void)selector;
     if(!kind_of(self,view))fail("setBounds: requires UIView");
     UiState *s=state_for(self,1);
@@ -172,7 +174,7 @@ static uintptr_t view_layer(void *self,const char *selector) {
 static void view_set_hidden(void *self,const char *selector,int hidden) {
     (void)selector;
     if(!kind_of(self,view))fail("setHidden: receiver is not UIView");
-    state_for(self,1)->hidden=!!hidden;
+    state_for(self,1)->hidden=(uint8_t)hidden!=0;
 }
 static uint32_t view_hidden(void *self,const char *selector) {
     (void)selector;
@@ -180,6 +182,10 @@ static uint32_t view_hidden(void *self,const char *selector) {
     UiState *s=state_for(self,0);
     return s?(uint32_t)s->hidden:(uint32_t)kind_of(self,window_class);
 }
+static void view_interaction(void *self,const char *sel,uint32_t enabled){(void)sel;if(!kind_of(self,view))fail("Not a UIView");state_for(self,1)->interaction_enabled=(uint8_t)enabled!=0;}
+static uint32_t view_interaction_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->interaction_enabled:1;}
+static void view_multiple(void *self,const char *sel,uint32_t enabled){(void)sel;if(!kind_of(self,view))fail("Not a UIView");state_for(self,1)->multiple_touch_enabled=(uint8_t)enabled!=0;}
+static uint32_t view_multiple_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->multiple_touch_enabled:0;}
 static void view_set_tag(void *self,const char *selector,int tag) {
     (void)selector;
     if(!kind_of(self,view))fail("setTag: receiver is not UIView");
@@ -315,6 +321,10 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         METHOD("setNeedsDisplay","v@:",view_set_needs_display),
         METHOD("setHidden:","v@:c",view_set_hidden),
         METHOD("isHidden","c@:",view_hidden),
+        METHOD("setUserInteractionEnabled:","v@:c",view_interaction),
+        METHOD("isUserInteractionEnabled","c@:",view_interaction_get),
+        METHOD("setMultipleTouchEnabled:","v@:c",view_multiple),
+        METHOD("isMultipleTouchEnabled","c@:",view_multiple_get),
         METHOD("setTag:","v@:i",view_set_tag),
         METHOD("tag","i@:",view_tag),
         METHOD("addSubview:","v@:@",view_add_subview),
@@ -346,3 +356,43 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
     }
     return 0;
 }
+
+void *im2_uikit_view_parent(void *self){
+    if(!kind_of(self,view))return NULL;
+    UiState *s=state_for(self,0);return s?s->parent:NULL;
+}
+int im2_uikit_view_origin(void *self,void *window,Im2Point32 *out){
+    if(!out || !kind_of(self,view) || !kind_of(window,window_class))return -1;
+    Im2Point32 point={0};void *cursor=self;
+    for(size_t depth=0;cursor && depth<128;depth++){
+        if(cursor==window){*out=point;return 0;}
+        UiState *s=state_for(cursor,0);
+        if(!s || !s->frame_valid || !s->bounds_valid || !isfinite(s->frame.x) || !isfinite(s->frame.y) || !isfinite(s->bounds.x) || !isfinite(s->bounds.y))return -1;
+        point.x+=s->frame.x-s->bounds.x;point.y+=s->frame.y-s->bounds.y;cursor=s->parent;
+    }return -1;
+}
+int im2_uikit_view_visible(void *self,void *window){
+    if(!kind_of(self,view) || !kind_of(window,window_class))return 0;
+    for(size_t depth=0;self && depth<128;depth++){
+        UiState *s=state_for(self,0);if(!s || s->hidden || !s->interaction_enabled)return 0;
+        if(self==window)return 1;
+        self=s->parent;
+    }return 0;
+}
+static void *hit_view(void *self,Im2Point32 point,unsigned depth){
+    if(depth>128)return NULL;
+    UiState *s=state_for(self,0);
+    if(!s || s->hidden || !s->interaction_enabled || !s->bounds_valid || !isfinite(s->bounds.x) || !isfinite(s->bounds.y) || !isfinite(s->bounds.width) || !isfinite(s->bounds.height) || s->bounds.width<=0 || s->bounds.height<=0 || point.x<s->bounds.x || point.y<s->bounds.y || point.x>=s->bounds.x+s->bounds.width || point.y>=s->bounds.y+s->bounds.height)return NULL;
+    /* addSubview appends in z order; the last matching child wins. */
+    void *hit=NULL;
+    for(UiChild *c=s->children;c;c=c->next){UiState *child=state_for(c->view,0);if(!child || !child->frame_valid || !child->bounds_valid)continue;
+        Im2Point32 local={point.x-child->frame.x+child->bounds.x,point.y-child->frame.y+child->bounds.y};
+        if(!isfinite(local.x) || !isfinite(local.y))continue;
+        void *candidate=hit_view(c->view,local,depth+1);if(candidate)hit=candidate;
+    }return hit?hit:self;
+}
+void *im2_uikit_hit_test(void *window,Im2Point32 point){
+    return kind_of(window,window_class) && isfinite(point.x) && isfinite(point.y)?hit_view(window,point,0):NULL;
+}
+
+int im2_uikit_view_accepts_multiple(void *self){return kind_of(self,view)?(int)view_multiple_get(self,NULL):0;}

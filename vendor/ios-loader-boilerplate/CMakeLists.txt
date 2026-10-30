@@ -43,6 +43,8 @@ add_library(im2_ios_loader_objects OBJECT
   source/numbers.c
   source/defaults.c
   source/cfbundle.c
+  source/sets.c
+  source/touches.c
   source/uikit_screen.c
   source/eagl_bridge.c
   source/objc_runtime.c

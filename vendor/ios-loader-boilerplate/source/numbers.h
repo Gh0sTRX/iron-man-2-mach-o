@@ -6,3 +6,6 @@ void *im2_number_bool(int value,int autorelease);
 void *im2_number_signed(int64_t value,int autorelease);
 void *im2_number_unsigned(uint64_t value,int autorelease);
 int im2_number_bool_value(const void *object,int *value);
+
+/* Returns -1 for non-native-number operands, otherwise writes mathematical equality. */
+int im2_numbers_equal(const void *a,const void *b,int *equal);

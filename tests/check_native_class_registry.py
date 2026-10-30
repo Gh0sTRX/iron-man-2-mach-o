@@ -76,5 +76,14 @@ assert "sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG" in src
 assert "source/cfbundle.c" in cmake and "tests/test_cfbundle.c" in runner
 assert "{cfbundle_imports, &cfbundle_imports_count}" in imports
 
+assert "im2_sets_init(root)" in src and "im2_touches_init(root,call_guest)" in src
+assert "source/sets.c" in cmake and "source/touches.c" in cmake
+assert "tests/test_${test}.c" in runner and "for test in sets touches" in runner
+hierarchy=(base/"vendor/ios-loader-boilerplate/source/uikit_hierarchy.c").read_text()
+for signature in ("IM2_UIKIT_PCS uintptr_t view_init_frame", "IM2_UIKIT_PCS void view_set_frame", "IM2_UIKIT_PCS void view_set_bounds"):
+    assert signature in hierarchy, "CGRect input IMP lost base AAPCS ABI"
+assert "im2_touches_frame(samples," in src and "im2_uikit_idle_timer_disabled()" in src
+assert "touch_count>IM2_TOUCH_LIMIT" in src, "VitaSDK raw report capacity exceeds the six-contact delivery array"
+
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)

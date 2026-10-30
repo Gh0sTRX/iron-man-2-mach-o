@@ -31,6 +31,8 @@
 #include "timers.h"
 #include "numbers.h"
 #include "defaults.h"
+#include "sets.h"
+#include "touches.h"
 #include <psp2/apputil.h>
 #include <psp2/system_param.h>
 #include "uikit_loop.h"
@@ -43,7 +45,7 @@
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[59];
+static import_entry class_imports[65];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -73,15 +75,18 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_EAGLContext","_OBJC_METACLASS_$_EAGLContext",
         "_OBJC_CLASS_$_NSTimer","_OBJC_METACLASS_$_NSTimer",
         "_OBJC_CLASS_$_NSNumber","_OBJC_METACLASS_$_NSNumber",
-        "_OBJC_CLASS_$_NSUserDefaults","_OBJC_METACLASS_$_NSUserDefaults"};
-    for(size_t i=0;i<58;i++) {
+        "_OBJC_CLASS_$_NSUserDefaults","_OBJC_METACLASS_$_NSUserDefaults",
+        "_OBJC_CLASS_$_NSSet","_OBJC_METACLASS_$_NSSet",
+        "_OBJC_CLASS_$_UITouch","_OBJC_METACLASS_$_UITouch",
+        "_OBJC_CLASS_$_UIEvent","_OBJC_METACLASS_$_UIEvent"};
+    for(size_t i=0;i<64;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[58]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[64]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -419,6 +424,7 @@ void objc_init(void) {
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
     if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
     if(im2_numbers_init(root))fatal_error("NSNumber registration failed");
+    if(im2_sets_init(root))fatal_error("NSSet registration failed");
     _Static_assert(SCE_SYSTEM_PARAM_LANG_ENGLISH_US==1 && SCE_SYSTEM_PARAM_LANG_PORTUGUESE_BR==17 && SCE_SYSTEM_PARAM_LANG_ENGLISH_GB==18 && SCE_SYSTEM_PARAM_LANG_TURKISH==19,"Vita language enumeration changed");
     int language=-1;
     if(sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG,&language)<0 || !im2_vita_language_code(language))fatal_error("Vita system language query failed; no guessed AppleLanguages preference");
@@ -439,11 +445,12 @@ void objc_init(void) {
         gles_eagl_ready,gles_eagl_storage,gles_eagl_present
     }))fatal_error("EAGL native graphics backend unavailable");
     if(im2_timers_init(root,(Im2TimerConfig){timer_now_us,NULL,call_guest,foundation_failure}))fatal_error("NSTimer scheduler registration failed");
+    if(im2_touches_init(root,call_guest))fatal_error("Touch event registration failed");
     bind_class_imports();
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<59;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<65;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 
@@ -468,7 +475,19 @@ static void *ns_class_from_string(void *string) {
 /* Real owner _main passes nil principal class and the CFString "AppController".
  * Dispatch the actual registered legacy delegate callback. UIApplicationMain
  * cannot return success until a real UIKit event/render loop exists. */
-static int loop_poll(void *context){(void)context;input_poll();ime_poll();return 0;}
+static int loop_poll(void *context){
+    (void)context;if(im2_uikit_idle_timer_disabled() && sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT)<0)return -1;
+    input_poll();size_t callbacks;uint64_t now=sceKernelGetProcessTimeWide();
+    int status=im2_input_touch_status();
+    if(status<0){(void)im2_touches_cancel(now,&callbacks);return -1;}
+    if(status>0){
+        if(touch_count<0 || touch_count>IM2_TOUCH_LIMIT){(void)im2_touches_cancel(now,&callbacks);return -1;}
+        Im2TouchSample samples[IM2_TOUCH_LIMIT];
+        for(int i=0;i<touch_count;i++)samples[i]=(Im2TouchSample){touches[i].id,(float)touches[i].x,(float)touches[i].y};
+        if(im2_touches_frame(samples,(size_t)touch_count,now,im2_uikit_key_window(),&callbacks))return -1;
+    }
+    ime_poll();return 0;
+}
 static int loop_wait(void *context,uint32_t us){(void)context;return sceKernelDelayThread(us)<0?-1:0;}
 static int ui_application_main(int argc,char *const *argv,
     void *principal_class_name,void *delegate_class_name) {
@@ -480,7 +499,7 @@ static int ui_application_main(int argc,char *const *argv,
     if(result==IM2_UIKIT_BOOT_NEEDS_RUN_LOOP){
         if(!im2_timers_scheduled())fatal_error("UIKit launch registered no supported scheduled timers; refusing an empty rendering loop");
         if(im2_uikit_launch_finish_pool())fatal_error("UIKit launch autorelease-pool drain failed");
-        l_info("Entering main-thread NSTimer loop; UIKit touch delivery and additional CFRunLoop sources remain incomplete");
+        l_info("Entering main-thread timer/front-touch loop; native controls and additional CFRunLoop sources remain incomplete");
         (void)im2_uikit_loop_run(&(Im2UIKitLoop){NULL,loop_poll,loop_wait,NULL,10000});
         fatal_error("Vita timer loop stopped or rejected unsupported scheduler state");
     }

@@ -18,6 +18,8 @@ SceCtrlData pad;
 
 static touch_point prev_touches[SCE_TOUCH_MAX_REPORT];
 static int prev_count = 0;
+static int touch_status;
+int im2_input_touch_status(void){return touch_status;}
 
 void input_init(void) {
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
@@ -33,8 +35,9 @@ void input_poll(void) {
     sceCtrlPeekBufferPositive(0, &pad, 1);
 
     SceTouchData t;
-    if (sceTouchPeek(SCE_TOUCH_PORT_FRONT, &t, 1) < 1)
-        t.reportNum = 0;
+    int reports=sceTouchPeek(SCE_TOUCH_PORT_FRONT,&t,1);
+    touch_status=reports<0?-1:reports>0?1:0;
+    if(reports<=0)return; /* No fresh sample must not synthesize finger releases. */
 
     memcpy(prev_touches, touches, sizeof(touches));
     prev_count = touch_count;

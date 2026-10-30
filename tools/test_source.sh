@@ -174,3 +174,19 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_cfbundle
 build/host-runtime/test_cfbundle
+
+for test in sets touches; do
+  cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+    -no-pie -pthread -I vendor/ios-loader-boilerplate/source "tests/test_${test}.c" \
+    vendor/ios-loader-boilerplate/source/sets.c \
+    vendor/ios-loader-boilerplate/source/touches.c \
+    vendor/ios-loader-boilerplate/source/uikit_hierarchy.c \
+    vendor/ios-loader-boilerplate/source/uikit_application.c \
+    vendor/ios-loader-boilerplate/source/numbers.c \
+    vendor/ios-loader-boilerplate/source/collections.c \
+    vendor/ios-loader-boilerplate/source/foundation.c \
+    vendor/ios-loader-boilerplate/source/url.c \
+    vendor/ios-loader-boilerplate/source/cfstring.c \
+    vendor/ios-loader-boilerplate/source/objc_runtime.c -lm -o "build/host-runtime/test_${test}"
+  "build/host-runtime/test_${test}"
+done

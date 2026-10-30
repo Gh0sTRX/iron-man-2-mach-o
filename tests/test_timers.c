@@ -69,7 +69,8 @@ int main(void){
  send_void(repeating,"invalidate");assert(!send(repeating,"isValid") && im2_objc_retain_count(target)==1);
  void *once=timer(1,"draw",0,target);assert(once);now=2000000;assert(!im2_timers_poll(&fired) && fired==1 && draws==3);
  assert(!send(once,"isValid") && !im2_timers_scheduled() && send(once,"userInfo")== (uintptr_t)info);
- void *self=timer(.1,"stop:",1,target);assert(self);now=2100001;assert(!im2_timers_poll(&fired) && fired==1 && with_timer==1 && !send(self,"isValid"));
+ void *high_bool=timer(.000001,"draw",0x100,target);assert(high_bool);now++;assert(!im2_timers_poll(&fired) && fired==1 && !send(high_bool,"isValid"));
+ void *self=timer(.1,"stop:",1,target);assert(self);now+=100001;assert(!im2_timers_poll(&fired) && fired==1 && with_timer==1 && !send(self,"isValid"));
  void *first=timer(.1,"mutate:",0,target);other=timer(.1,"draw",0,target);assert(first && other);
  now+=100001;unsigned before=draws;assert(!im2_timers_poll(&fired) && fired==1 && mutations==1 && draws==before && spawned);
  now+=100;assert(!im2_timers_poll(&fired) && fired==1 && draws==before+1);

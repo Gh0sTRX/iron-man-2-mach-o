@@ -13,6 +13,7 @@ typedef struct {
     void *key_window;  /* Strongly held until another window becomes key. */
     uint32_t orientation;
     uint32_t status_bar_hidden;
+    uint32_t idle_disabled;
 } Application;
 
 static Im2ObjcClass *application_class;
@@ -80,7 +81,7 @@ static uintptr_t key_window(void *receiver,const char *selector) {
 static void set_status_hidden(void *receiver,const char *selector,uint32_t hidden) {
     (void)selector;
     if(!is_app(receiver))fail("UIApplication setStatusBarHidden receiver invalid");
-    application->status_bar_hidden=hidden!=0;
+    application->status_bar_hidden=(uint8_t)hidden!=0;
 }
 static uint32_t is_status_hidden(void *receiver,const char *selector) {
     (void)selector;
@@ -104,6 +105,8 @@ static uint32_t get_orientation(void *receiver,const char *selector) {
     if(!is_app(receiver))fail("UIApplication statusBarOrientation receiver invalid");
     return application->orientation;
 }
+static void set_idle(void *receiver,const char *selector,uint32_t value){(void)selector;if(!is_app(receiver))fail("Invalid UIApplication idle timer receiver");application->idle_disabled=(uint8_t)value!=0;}
+static uint32_t get_idle(void *receiver,const char *selector){(void)selector;if(!is_app(receiver))fail("Invalid UIApplication idle timer receiver");return application->idle_disabled;}
 #define METHOD(s,t,f) {s,t,(Im2Imp)(f),0}
 int im2_uikit_application_init(Im2ObjcClass *root,void (*on_failure)(const char *)) {
     if(application_class || !root ||
@@ -114,6 +117,8 @@ int im2_uikit_application_init(Im2ObjcClass *root,void (*on_failure)(const char 
         METHOD("delegate","@@:",get_delegate),
         METHOD("setDelegate:","v@:@",set_delegate),
         METHOD("keyWindow","@@:",key_window),
+        METHOD("setIdleTimerDisabled:","v@:c",set_idle),
+        METHOD("isIdleTimerDisabled","c@:",get_idle),
         METHOD("setStatusBarHidden:","v@:c",set_status_hidden),
         METHOD("isStatusBarHidden","c@:",is_status_hidden),
         METHOD("setStatusBarOrientation:","v@:i",set_orientation),
@@ -146,3 +151,7 @@ int im2_uikit_application_shutdown(void) {
     if(!application || im2_objc_retain_count(application)!=1)return -1;
     return im2_objc_release(application);
 }
+
+void *im2_uikit_key_window(void){return application?application->key_window:NULL;}
+
+int im2_uikit_idle_timer_disabled(void){return application?application->idle_disabled!=0:0;}

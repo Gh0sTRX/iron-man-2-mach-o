@@ -38,6 +38,10 @@ static uint32_t equal_value(Number *a,const char *sel,void *other){
  int aneg=is_signed(a) && signed_bits(a)<0,bneg=is_signed(b) && signed_bits(b)<0;
  return aneg==bneg && a->bits==b->bits;
 }
+int im2_numbers_equal(const void *a,const void *b,int *equal){
+ if(!equal || !is_number(a) || !is_number(b))return -1;
+ *equal=equal_value((Number *)a,NULL,(void *)b)!=0;return 0;
+}
 static uintptr_t copy_value(void *o,const char *sel){(void)sel;return (uintptr_t)im2_objc_retain(o);}
 static uintptr_t string_value(Number *n,const char *sel){(void)sel;char out[32];if(is_signed(n))snprintf(out,sizeof(out),"%lld",(long long)signed_bits(n));else snprintf(out,sizeof(out),"%llu",(unsigned long long)n->bits);return (uintptr_t)im2_string_create(out,1);}
 #define M(s,t,f) {s,t,(Im2Imp)(f),0}

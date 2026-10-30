@@ -32,3 +32,6 @@ void input_init(void);
  * @brief Polls physical button state and updates projected touch positions.
  */
 void input_poll(void);
+
+/* 1 fresh touch sample, 0 no new sample, -1 hardware polling failure. */
+int im2_input_touch_status(void);

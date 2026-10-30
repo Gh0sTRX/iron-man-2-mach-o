@@ -24,7 +24,7 @@ Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştir
 
 ### 1. İlk gerçek açılışı engelleyen iOS bağımlılıkları
 
-Özgün 490 import adının **216'sı** tablolarla eşleşiyor; **274 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **24'ü kısmi**, **40'ı uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
+Özgün 490 import adının **217'si** tablolarla eşleşiyor; **273 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **25'i kısmi**, **39'u uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
 
 Eksik Apple/CoreFoundation/UIKit API'leri, C/C++ runtime bağlantıları, bazı GLES çağrıları ve sistem/dosya/ağ işlevleri gerçek davranışlarıyla ele alınmalı. `NSLocale`, `NSRunLoop`, çeşitli UIKit/medya sınıfları hâlâ eksik örneklerdir. NSBundle/tercih plist okuma ve gerekirse diğer veri formatları tamamlanmalı; oyun sürümü/ayarları uydurulmamalı.
 
@@ -42,7 +42,7 @@ OES/EAGL kodu mevcut, fakat GPU'da texture/format/draw, ekran döndürme ve öl�
 
 ### 4. Dokunma ve Vita kontrolleri
 
-`input_poll` donanımı örnekliyor; **UITouch/NSSet nesneleri üretip özgün touchesBegan/Moved/Ended zincirine teslim etmiyor**. Ekran dönüşümü, touch kimliği/phase/sonlandırma, view koordinatları ve olay sırası tamamlanmalı. Düğme/analog hareket ve çatışma eşlemeleri gerçek oyun üzerinde test edilmeli. Şu an kontrol örnekleme kodunun varlığı oyunun kontrol edilebildiği anlamına gelmez.
+Native UITouch/UIEvent/NSSet oluşturma ve özgün touch callback'lerine gönderme kaynak kodu eklendi; kimlik/phase/capture/cancel, çoklu dokunma ve CGPoint stret host testleri geçti. Kodun donanım ve özgün guest tarafında çalışması henüz doğrulanmadı. Gerçek cihazda dokunma yönü/konumu, event sırası ve oyun tepkisi test edilmeli. Native UIControl/gesture davranışı, multi-tap ve gamepad/analog eşlemeleri hâlâ açık. Ayrıntı: [TOUCH_INPUT_PROGRESS_2026-10-31_TR.md](TOUCH_INPUT_PROGRESS_2026-10-31_TR.md).
 
 ### 5. Ses
 
@@ -64,11 +64,11 @@ CFBundleGetMainBundle, CFBundleCopyBundleURL, CFBundleCopyResourcesDirectoryURL,
 
 ## Son kontrol sayıları
 
-- 35 C/ASM biriminin VitaSDK ARM ELF bağlantısı başarılı; güçlü undefined ELF sembolü yok.
+- 37 C/ASM biriminin VitaSDK ARM ELF bağlantısı başarılı; güçlü undefined ELF sembolü yok.
 - Yerel host ASan/UBSan testleri başarılı; yeni CFBundle testi gerçek import router'ını ve kaynak dosyası byte'larını kullanıyor.
-- Üretim assembly'siyle 25 sentetik ARM/Thumb emülasyon senaryosu başarılı.
+- Üretim assembly'siyle 25 sentetik ARM/Thumb dispatch ve 6 üretim UIKit CGRect ABI emülasyon senaryosu başarılı.
 - Özgün oyunun native Vita boot'u, menü ve cihaz testi: **doğrulanmadı**.
 
 Tam eksik isim envanteri [REMAINING_BINDINGS_2026-10-31.json](REMAINING_BINDINGS_2026-10-31.json), yerel derleme kanıtı [BUILD_EVIDENCE_2026-10-31.json](BUILD_EVIDENCE_2026-10-31.json) içindedir.
 
-**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 274 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
+**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 273 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.

@@ -68,7 +68,7 @@ static uintptr_t factory(void *cls,const char *sel,uint32_t lo,uint32_t hi,
  Timer *t=im2_objc_alloc(timer_class,cleanup);if(!t)return 0;
  t->target=im2_objc_retain(target);t->info=info?im2_objc_retain(info):NULL;
  if(!t->target || (info && !t->info)){im2_objc_release(t);return 0;}
- t->selector=interned;t->interval=interval;t->due=now+interval;t->interval_bits=bits;t->valid=1;t->repeats=!!repeats;
+ t->selector=interned;t->interval=interval;t->due=now+interval;t->interval_bits=bits;t->valid=1;t->repeats=(uint8_t)repeats!=0;
  if(!im2_objc_autorelease(t)){im2_objc_release(t);return 0;}
  scheduled[slot]=im2_objc_retain(t);t->scheduled=1;return (uintptr_t)t;
 }
