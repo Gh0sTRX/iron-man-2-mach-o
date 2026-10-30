@@ -13,6 +13,9 @@ bash tools/test_objc_runtime.sh
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
   -I vendor/ios-loader-boilerplate/source tests/test_external_reloc.c \
   vendor/ios-loader-boilerplate/source/macho_reloc.c -o build/host-runtime/test_external_reloc
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer -I vendor/ios-loader-boilerplate/source tests/test_external_reloc_overflow.c vendor/ios-loader-boilerplate/source/macho_reloc.c -o build/host-runtime/test_external_reloc_overflow
+build/host-runtime/test_external_reloc_overflow
 build/host-runtime/test_external_reloc
 
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
