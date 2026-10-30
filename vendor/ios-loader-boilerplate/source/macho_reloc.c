@@ -33,7 +33,15 @@ int im2_apply_external_relocs(const void *records,size_t count,uint32_t ns,
         if(resolve(ctx,read32(r+4)&0xffffffu,&address)) {why="unresolved required external symbol";goto bad;}
         size_t lo=0,hi=count;
         while(lo<hi) {size_t mid=lo+(hi-lo)/2;if(patches[mid].va<va)lo=mid+1;else hi=mid;}
-        patches[lo].value+=address; /* Modulo 2^32; preserves negative and vtable+8 addends. */
+        /* A 32-bit external relocation adds its existing signed addend to the
+         * resolved symbol.  Reject overflow rather than silently wrapping a
+         * host address into unrelated guest memory. */
+        int64_t addend=(int32_t)patches[lo].value;
+        int64_t result=(int64_t)(uint64_t)address+addend;
+        if(result<0 || result>UINT32_MAX) {
+            why="external relocation address/addend overflow";goto bad;
+        }
+        patches[lo].value=(uint32_t)result;
     }
     for(size_t i=0;i<count;i++) {
         uint32_t v=patches[i].value;uint8_t *p=patches[i].slot;
