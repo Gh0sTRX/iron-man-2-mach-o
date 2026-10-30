@@ -56,6 +56,12 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_uikit_application
 
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_uikit_screen.c \
+  vendor/ios-loader-boilerplate/source/uikit_screen.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -lm -o build/host-runtime/test_uikit_screen
+build/host-runtime/test_uikit_screen
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
   -no-pie -pthread -I vendor/ios-loader-boilerplate/source tests/test_uikit_bootstrap.c \
   vendor/ios-loader-boilerplate/source/uikit_bootstrap.c \
   vendor/ios-loader-boilerplate/source/uikit_application.c \
