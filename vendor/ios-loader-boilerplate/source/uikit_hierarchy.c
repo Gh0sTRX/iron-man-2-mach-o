@@ -22,6 +22,7 @@ typedef struct UiState {
     Im2Rect32 frame;
     Im2Rect32 bounds;
     void *controller_view;
+    void *layer; /* strong lifetime, +1 from provider */
     void *parent; /* non-owning; parent retains each child through UiChild */
     UiChild *children;
     int hidden,tag,frame_valid,bounds_valid,needs_layout,needs_display;
@@ -34,6 +35,7 @@ static UiState *states;
 static pthread_mutex_t state_lock=PTHREAD_MUTEX_INITIALIZER;
 static void (*failure)(const char *);
 static int (*activate_window)(void *);
+static void *(*make_layer)(void *);
 
 static void fail(const char *why) {
     if(failure)failure(why);
@@ -72,6 +74,7 @@ static void discard_state(void *owner) {
             child=next;
         }
         if(s->controller_view)im2_objc_release(s->controller_view);
+        if(s->layer)im2_objc_release(s->layer);
         free(s);
     }
 }
@@ -148,6 +151,23 @@ int im2_uikit_view_invalidation(const void *self,int *layout,int *display) {
     *layout=s?s->needs_layout:0;
     *display=s?s->needs_display:0;
     return 0;
+}
+int im2_uikit_bind_layer_factory(void *(*factory)(void *)) {
+    if(!view || !factory || make_layer)return -1;
+    make_layer=factory;return 0;
+}
+static uintptr_t view_layer(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,view))fail("UIView layer receiver invalid");
+    if(!make_layer)fail("UIView layer creation requires registered CAEAGLLayer backend");
+    UiState *s=state_for(self,1);
+    if(!s->layer) {
+        void *layer=make_layer(self);
+        if(!layer || !im2_objc_retain_count(layer))
+            fail("UIView layer provider did not create a valid owned layer");
+        s->layer=layer;
+    }
+    return (uintptr_t)s->layer;
 }
 static void view_set_hidden(void *self,const char *selector,int hidden) {
     (void)selector;
@@ -290,6 +310,7 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         {"frame","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_frame,sizeof(Im2Rect32)},
         {"bounds","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_bounds,sizeof(Im2Rect32)},
         METHOD("setBounds:","v@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_set_bounds),
+        METHOD("layer","@@:",view_layer),
         METHOD("setNeedsLayout","v@:",view_set_needs_layout),
         METHOD("setNeedsDisplay","v@:",view_set_needs_display),
         METHOD("setHidden:","v@:c",view_set_hidden),
