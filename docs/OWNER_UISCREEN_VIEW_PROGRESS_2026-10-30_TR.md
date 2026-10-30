@@ -28,7 +28,7 @@ Tekrar üretim: `python3 tools/audit_owner_uiscreen.py --ipa /path/to/owned.ipa`
 
 ## Tamamlanmamış veya henüz doğrulanmamış
 
-**Başarılı ARM ELF derlemesi ve bütün host sanitizer testlerinin bu yeni commitlerle geçtiği henüz kanıtlanmadı.** Derleme/CI ve gerçek Vita testinin sonucu okunana kadar bunları başarı olarak bildirme.
+**Doğrulandı:** GitHub Actions [40979438904](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40979438904) başarılı tamamlandı. Yeni host ASan/UBSan testleri, 28 C/ASM kaynak biriminin VitaSDK ile ARM derlemesi, tam ELF linki, ELF ABI/import denetimi ve 23 ARM/Thumb Unicorn emülasyon testi geçti. Ayrıntı: `docs/CI_EVIDENCE_UIKIT_2026-10-30.json`. Ancak bu sonuç gerçek oyun kodunun native Vita loader'da çalıştığı veya PS Vita üzerinde açıldığı anlamına gelmez.
 
 `UIApplicationMain` gerçek giriş olarak bağlanmış olsa da Vita event loop, `EAGLView` grafik yüzeyi, OpenGL ES rendering, kullanıcı girdisi, UIKit çizimi, ekran çözünürlüğü/orientasyon köprüsü ve kalan iOS framework/import uyumluluğu henüz tamamlanmadı.
 
@@ -36,7 +36,7 @@ Tekrar üretim: `python3 tools/audit_owner_uiscreen.py --ipa /path/to/owned.ipa`
 
 ## Sıradaki teknik eşik
 
-1. Yeni host testlerini ASan/UBSan altında çalıştır ve hataları düzelt.
-2. VitaSDK ile 28 C/ASM biriminin derlenmesini ve tam ELF bağlantısını yeniden kanıtla.
+1. Orijinal Mach-O'daki hâlâ eksik importların öncelikli olanlarını ve ABI'lerini çöz.
+2. İlk yürütme için gerçek Vita bellek/RX/cache doğrulama planını uygula (VPK henüz yok).
 3. Özgün `EAGLView` metotları (`_createSurface`, `swapBuffers`) için EAGLContext/CAEAGLLayer kurulum zincirini çöz.
 4. Event ve render loop olmadan `UIApplicationMain` başarı döndürmesin.
