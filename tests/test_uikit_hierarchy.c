@@ -78,6 +78,10 @@ static void set_frame(void *view,Im2Rect32 r) {
     const char *sel="setFrame:";
     ((void(*)(void *,const char *,Im2Rect32))method(view,sel))(view,sel,r);
 }
+static void set_bounds(void *view,Im2Rect32 r) {
+    const char *sel="setBounds:";
+    ((void(*)(void *,const char *,Im2Rect32))method(view,sel))(view,sel,r);
+}
 static void set_view(void *controller,void *view) {
     const char *sel="setView:";
     ((void(*)(void *,const char *,void *))method(controller,sel))(controller,sel,view);
@@ -138,6 +142,20 @@ int main(void) {
     assert(!im2_uikit_view_frame(v,&actual) && actual.width==240);
     bounds_return=get_rect(v,"bounds");
     assert(bounds_return.width==240 && bounds_return.height==160);
+    int needs_layout=0,needs_display=0;
+    assert(!im2_uikit_view_invalidation(v,&needs_layout,&needs_display));
+    assert(needs_layout==1 && needs_display==0);
+    set_bounds(v,(Im2Rect32){5,7,160,100});
+    bounds_return=get_rect(v,"bounds");
+    assert(bounds_return.x==5 && bounds_return.y==7 &&
+           bounds_return.width==160 && bounds_return.height==100);
+    assert(!im2_uikit_view_invalidation(v,&needs_layout,&needs_display));
+    assert(needs_layout==1 && needs_display==0);
+    message_void0(v,"setNeedsDisplay");
+    message_void0(v,"setNeedsLayout");
+    assert(!im2_uikit_view_invalidation(v,&needs_layout,&needs_display));
+    assert(needs_layout==1 && needs_display==1);
+    assert(im2_uikit_view_invalidation(v,NULL,&needs_display));
 
     set_hidden(v,3);assert(hidden(v)==1);
     set_hidden(v,0);assert(hidden(v)==0);
