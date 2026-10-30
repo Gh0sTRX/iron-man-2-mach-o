@@ -20,9 +20,6 @@ static Im2Imp imp(void *receiver,const char *selector) {
 static void *send0(void *receiver,const char *selector) {
     return (void *)((uintptr_t(*)(void *,const char *))imp(receiver,selector))(receiver,selector);
 }
-static void *send1(void *receiver,const char *selector,void *value) {
-    return (void *)((uintptr_t(*)(void *,const char *,void *))imp(receiver,selector))(receiver,selector,value);
-}
 static void call0(void *receiver,const char *selector) {
     ((void(*)(void *,const char *))imp(receiver,selector))(receiver,selector);
 }
