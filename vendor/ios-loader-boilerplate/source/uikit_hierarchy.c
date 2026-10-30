@@ -20,10 +20,11 @@ typedef struct UiChild {
 typedef struct UiState {
     void *owner;
     Im2Rect32 frame;
+    Im2Rect32 bounds;
     void *controller_view;
     void *parent; /* non-owning; parent retains each child through UiChild */
     UiChild *children;
-    int hidden,tag,frame_valid;
+    int hidden,tag,frame_valid,bounds_valid,needs_layout,needs_display;
     struct UiState *next;
 } UiState;
 
@@ -89,6 +90,7 @@ static uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame
     if(!kind_of(self,view))fail("initWithFrame: receiver is not UIView");
     UiState *s=state_for(self,1);
     s->frame=frame;s->frame_valid=1;
+    s->bounds=(Im2Rect32){0,0,frame.width,frame.height};s->bounds_valid=1;
     if(kind_of(self,window_class))s->hidden=1;
     return (uintptr_t)self;
 }
@@ -96,6 +98,9 @@ static void view_set_frame(void *self,const char *selector,Im2Rect32 frame) {
     (void)selector;
     if(!kind_of(self,view))fail("setFrame: receiver is not UIView");
     UiState *s=state_for(self,1);s->frame=frame;s->frame_valid=1;
+    if(!s->bounds_valid){s->bounds=(Im2Rect32){0,0,frame.width,frame.height};s->bounds_valid=1;}
+    else{s->bounds.width=frame.width;s->bounds.height=frame.height;}
+    s->needs_layout=1;
 }
 int im2_uikit_view_frame(const void *receiver,Im2Rect32 *out) {
     if(!out || !kind_of(receiver,view))return -1;
@@ -116,8 +121,33 @@ static void view_get_bounds(Im2Rect32 *out,void *self,const char *selector) {
     (void)selector;
     if(!out || !kind_of(self,view))fail("UIView bounds receiver invalid");
     UiState *s=state_for(self,0);
-    if(!s || !s->frame_valid)fail("UIView bounds requested before initialization");
-    *out=(Im2Rect32){0.f,0.f,s->frame.width,s->frame.height};
+    if(!s || !s->bounds_valid)fail("UIView bounds requested before initialization");
+    *out=s->bounds;
+}
+static void view_set_bounds(void *self,const char *selector,Im2Rect32 bounds) {
+    (void)selector;
+    if(!kind_of(self,view))fail("setBounds: requires UIView");
+    UiState *s=state_for(self,1);
+    s->bounds=bounds;s->bounds_valid=1;s->needs_layout=1;
+}
+static void view_set_needs_layout(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,view))fail("setNeedsLayout requires UIView");
+    state_for(self,1)->needs_layout=1;
+}
+static void view_set_needs_display(void *self,const char *selector) {
+    (void)selector;
+    if(!kind_of(self,view))fail("setNeedsDisplay requires UIView");
+    state_for(self,1)->needs_display=1;
+}
+/* A future Vita UI renderer can inspect these flags, but only its real
+ * layout/draw phase may clear them. This code intentionally does not. */
+int im2_uikit_view_invalidation(const void *self,int *layout,int *display) {
+    if(!layout || !display || !kind_of(self,view))return -1;
+    UiState *s=state_for((void *)self,0);
+    *layout=s?s->needs_layout:0;
+    *display=s?s->needs_display:0;
+    return 0;
 }
 static void view_set_hidden(void *self,const char *selector,int hidden) {
     (void)selector;
@@ -259,6 +289,9 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         METHOD("setFrame:","v@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_set_frame),
         {"frame","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_frame,sizeof(Im2Rect32)},
         {"bounds","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_bounds,sizeof(Im2Rect32)},
+        METHOD("setBounds:","v@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_set_bounds),
+        METHOD("setNeedsLayout","v@:",view_set_needs_layout),
+        METHOD("setNeedsDisplay","v@:",view_set_needs_display),
         METHOD("setHidden:","v@:c",view_set_hidden),
         METHOD("isHidden","c@:",view_hidden),
         METHOD("setTag:","v@:i",view_set_tag),
