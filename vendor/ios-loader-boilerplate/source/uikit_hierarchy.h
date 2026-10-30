@@ -20,4 +20,7 @@ int im2_uikit_view_invalidation(const void *receiver,int *needs_layout,int *need
 /* Registers one application-owned UIWindow activation hook. The window class
  * deliberately refuses makeKeyAndVisible before an application is initialized. */
 int im2_uikit_bind_window_activation(int (*activate)(void *window));
+/* Lazy backing layer allocation delegated to the CAEAGLLayer module.
+ * The UIView sidecar takes ownership of the returned +1 object. */
+int im2_uikit_bind_layer_factory(void *(*create)(void *view));
 
