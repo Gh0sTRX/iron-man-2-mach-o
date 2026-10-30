@@ -1,11 +1,11 @@
 {
   "loader_objects_compiled": {
     "passed": true,
-    "evidence": "docs/BUILD_EVIDENCE_2026-10-30.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
+    "evidence": "GitHub Actions success run 40979438904 (2026-10-30; head e7c662acfab9af1315f2fad88865237cdb9e486f), docs/CI_EVIDENCE_UIKIT_2026-10-30.json. Reproduces 28 ARM source units and linked ELF; no VPK."
   },
   "loader_elf_linked": {
     "passed": true,
-    "evidence": "docs/BUILD_EVIDENCE_2026-10-30.json; reproduce with tools/build_loader_elf.sh using pinned SDK"
+    "evidence": "GitHub Actions success run 40979438904 (2026-10-30; head e7c662acfab9af1315f2fad88865237cdb9e486f), docs/CI_EVIDENCE_UIKIT_2026-10-30.json. Reproduces 28 ARM source units and linked ELF; no VPK."
   },
   "all_original_imports_bound": {
     "passed": false,
