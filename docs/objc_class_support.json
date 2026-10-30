@@ -1,5 +1,5 @@
 {
-  "note": "Original classref inventory (64 classes) from the owner Mach-O. Native UIApplication singleton, non-owning delegate, status-bar orientation state and retained key window are implemented, but UIApplicationMain event loop, actual screen rendering and Vita boot are not. The original main passes the CFString 'AppController' as delegateClassName.",
+  "note": "Original classrefs count 64. UIScreen now supports only mainScreen/bounds (320x480 compatibility assumption; native CGRect stret size 16). UIKit launch autorelease pool, UIView frame/bounds and Info.plist hidden status bar are partial; native Vita runtime, rendering and real game boot remain unverified.",
   "classes": [
     {
       "name": "NSString",
@@ -414,7 +414,7 @@
     {
       "name": "UIScreen",
       "source_classref_slots": 1,
-      "status": "not_implemented",
+      "status": "partial_host_runtime",
       "original_guest_behavior_verified": false,
       "physical_vita_verified": false
     },
