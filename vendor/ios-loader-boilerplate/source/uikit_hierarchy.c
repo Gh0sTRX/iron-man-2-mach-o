@@ -13,10 +13,16 @@
 _Static_assert(sizeof(Im2Rect32)==16,"legacy iOS ARM32 CGRect must be 16 bytes");
 #endif
 
+typedef struct UiChild {
+    void *view;
+    struct UiChild *next;
+} UiChild;
 typedef struct UiState {
     void *owner;
     Im2Rect32 frame;
     void *controller_view;
+    void *parent; /* non-owning; parent retains each child through UiChild */
+    UiChild *children;
     int hidden,tag,frame_valid;
     struct UiState *next;
 } UiState;
@@ -53,6 +59,17 @@ static void discard_state(void *owner) {
     if(s)*p=s->next;
     pthread_mutex_unlock(&state_lock);
     if(s) {
+        /* Unlink all children before releasing them: their final release may
+         * recursively invoke -dealloc and re-enter this sidecar registry. */
+        UiChild *child=s->children;
+        while(child) {
+            UiChild *next=child->next;
+            UiState *cs=state_for(child->view,0);
+            if(cs && cs->parent==owner)cs->parent=NULL;
+            im2_objc_release(child->view);
+            free(child);
+            child=next;
+        }
         if(s->controller_view)im2_objc_release(s->controller_view);
         free(s);
     }
