@@ -3,6 +3,7 @@
  * NOT claim a Vita GPU exists: success is only injected in these host tests.
  */
 #include "eagl_bridge.h"
+#include "gles_oes.h"
 #include "uikit_hierarchy.h"
 #include "foundation.h"
 #include "collections.h"
@@ -12,9 +13,11 @@
 #include <string.h>
 
 static int ready,storage_success,present_success,stored,presented;
+static uint32_t expected_format=IM2_OES_RGB565;
 static int gpu_ready(void) {return ready;}
-static int gpu_storage(uint32_t target) {
+static int gpu_storage(uint32_t target,uint32_t format) {
     assert(target==IM2_GL_RENDERBUFFER_OES);
+    assert(format==expected_format);
     stored++;
     return storage_success;
 }
@@ -152,6 +155,12 @@ int main(void) {
     present_success=1;
     assert(send_bool_uint(context,"presentRenderbuffer:",IM2_GL_RENDERBUFFER_OES));
     assert(presented==2);
+    storage_success=0;
+    assert(!send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer));
+    assert(!send_bool_uint(context,"presentRenderbuffer:",IM2_GL_RENDERBUFFER_OES));
+    assert(presented==2);
+    send_void1(layer,"setDrawableProperties:",NULL);expected_format=IM2_OES_RGBA8;storage_success=1;
+    assert(send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer));
     ready=0;
     assert(!send_bool_uint(context,"presentRenderbuffer:",IM2_GL_RENDERBUFFER_OES));
     assert(presented==2);

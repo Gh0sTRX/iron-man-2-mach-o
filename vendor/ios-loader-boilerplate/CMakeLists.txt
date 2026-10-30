@@ -43,6 +43,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/objc_runtime.c
   source/objc_guest.c
   source/gles.c
+  source/gles_oes.c
   source/coreaudio.c
   source/input.c
   source/patch.c

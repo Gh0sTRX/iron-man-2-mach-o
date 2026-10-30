@@ -14,6 +14,7 @@
 #include <vitaGL.h>
 
 #include "gles.h"
+#include "gles_oes.h"
 #include "hle.h"
 #include "imports.h"
 #include "objc.h"
@@ -34,7 +35,10 @@
 
 static GLuint fbo, fbo_tex;
 static int fbo_ready;
-static int eagl_storage_ready;
+static Im2Oes *oes;
+static GLenum oes_error;
+static void gles_error(GLenum e){if(e && !oes_error)oes_error=e;}
+static GLenum g_glGetError(void){GLenum e=oes_error;if(e){oes_error=0;return e;}return glGetError();}
 
 // Cached state overwritten during blit that glGet cannot fully query:
 typedef struct {
@@ -170,66 +174,75 @@ static void g_glGetLightxv(GLenum light, GLenum pname, GLfixed *out) { memset(ou
 
 // ---------------------------------------------------------------- EAGLView framebuffer emulation
 
-static GLuint next_name = 1;
-static void g_glGenNames(GLsizei n, GLuint *ids) {
-    for (int i = 0; i < n; i++)
-        ids[i] = next_name++;
+static uint32_t native_new_fb(void *ctx){(void)ctx;GLuint id=0;glGenFramebuffers(1,&id);return id;}
+static void native_delete_fb(void *ctx,uint32_t id){(void)ctx;glDeleteFramebuffers(1,&id);}
+static void native_bind_fb(void *ctx,uint32_t id){(void)ctx;glBindFramebuffer(GL_FRAMEBUFFER,id);}
+static uint32_t native_storage(void *ctx,uint32_t format,int width,int height){
+    (void)ctx;GLuint id=0;GLint previous=0;
+    gles_error(glGetError());
+    if(format!=IM2_OES_DEPTH16){
+        glGetIntegerv(GL_TEXTURE_BINDING_2D,&previous);
+        glGenTextures(1,&id);if(!id){gles_error(glGetError());return 0;}glBindTexture(GL_TEXTURE_2D,id);
+        GLenum pixel_format=format==IM2_OES_RGB565?GL_RGB:GL_RGBA;
+        glTexImage2D(GL_TEXTURE_2D,0,pixel_format,width,height,0,pixel_format,format==IM2_OES_RGB565?GL_UNSIGNED_SHORT_5_6_5:GL_UNSIGNED_BYTE,NULL);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glBindTexture(GL_TEXTURE_2D,(GLuint)previous);
+    }else{
+        glGetIntegerv(GL_RENDERBUFFER_BINDING,&previous);
+        glGenRenderbuffers(1,&id);if(!id){gles_error(glGetError());return 0;}glBindRenderbuffer(GL_RENDERBUFFER,id);
+        glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT16,width,height);
+        glBindRenderbuffer(GL_RENDERBUFFER,(GLuint)previous);
+    }
+    GLenum error=glGetError();if(error){gles_error(error);if(id){if(format!=IM2_OES_DEPTH16)glDeleteTextures(1,&id);else glDeleteRenderbuffers(1,&id);}return 0;}
+    return id;
 }
-static void g_glBindFramebufferOES(GLenum target, GLuint fb) { glBindFramebuffer(GL_FRAMEBUFFER, fbo); }
-static void g_glNoop(void) {}
-static GLenum g_glCheckFramebufferStatusOES(GLenum target) {
-    if(target != GL_FRAMEBUFFER || !fbo_ready || !eagl_storage_ready)
-        return 0x8CD6u; /* GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_OES */
-    glBindFramebuffer(GL_FRAMEBUFFER,fbo);
-    return glCheckFramebufferStatus(GL_FRAMEBUFFER);
+static void native_delete_storage(void *ctx,uint32_t format,uint32_t id){(void)ctx;if(format!=IM2_OES_DEPTH16)glDeleteTextures(1,&id);else glDeleteRenderbuffers(1,&id);}
+static int native_attach(void *ctx,uint32_t fb,uint32_t attachment,uint32_t format,uint32_t id){
+    (void)ctx;gles_error(glGetError());glBindFramebuffer(GL_FRAMEBUFFER,fb);
+    if(format!=IM2_OES_DEPTH16)glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,id,0);
+    else glFramebufferRenderbuffer(GL_FRAMEBUFFER,attachment,GL_RENDERBUFFER,id);
+    GLenum error=glGetError();gles_error(error);return !error;
 }
-static void g_glGetRenderbufferParameterivOES(GLenum target, GLenum pname, GLint *v) {
-    if(!v)return;
-    *v = target == 0x8D41u && eagl_storage_ready?
-        (pname == GL_RENDERBUFFER_WIDTH_OES ? FB_W :
-        pname == GL_RENDERBUFFER_HEIGHT_OES ? FB_H : 0) : 0;
+static uint32_t native_check(void *ctx,uint32_t fb){(void)ctx;glBindFramebuffer(GL_FRAMEBUFFER,fb);return glCheckFramebufferStatus(GL_FRAMEBUFFER);}
+static void g_glGenFramebuffersOES(GLsizei n,GLuint *ids){gles_error(im2_oes_gen(oes,IM2_OES_FB,n,ids));}
+static void g_glGenRenderbuffersOES(GLsizei n,GLuint *ids){gles_error(im2_oes_gen(oes,IM2_OES_RB,n,ids));}
+static void g_glBindFramebufferOES(GLenum target,GLuint id){gles_error(target==IM2_OES_FB?im2_oes_bind(oes,target,id):IM2_OES_ENUM);}
+static void g_glBindRenderbufferOES(GLenum target,GLuint id){gles_error(target==IM2_OES_RB?im2_oes_bind(oes,target,id):IM2_OES_ENUM);}
+static void g_glDeleteFramebuffersOES(GLsizei n,const GLuint *ids){gles_error(im2_oes_delete(oes,IM2_OES_FB,n,ids));}
+static void g_glDeleteRenderbuffersOES(GLsizei n,const GLuint *ids){gles_error(im2_oes_delete(oes,IM2_OES_RB,n,ids));}
+static void g_glRenderbufferStorageOES(GLenum target,GLenum format,GLsizei w,GLsizei h){gles_error(target==IM2_OES_RB?im2_oes_storage(oes,format,w,h):IM2_OES_ENUM);}
+static void g_glFramebufferRenderbufferOES(GLenum target,GLenum attachment,GLenum rbtarget,GLuint id){gles_error(target==IM2_OES_FB && rbtarget==IM2_OES_RB?im2_oes_attach(oes,attachment,id):IM2_OES_ENUM);}
+static GLenum g_glCheckFramebufferStatusOES(GLenum target){if(target!=IM2_OES_FB){gles_error(IM2_OES_ENUM);return 0;}return im2_oes_status(oes);}
+static void g_glGetRenderbufferParameterivOES(GLenum target,GLenum pname,GLint *value){gles_error(target==IM2_OES_RB?im2_oes_parameter(oes,pname,value):IM2_OES_ENUM);}
+static void g_glGetIntegerv(GLenum pname,GLint *value){
+    if(!value){gles_error(IM2_OES_VALUE);return;}
+    if(pname==0x8CA6u)*value=(GLint)im2_oes_binding(oes,IM2_OES_FB);
+    else if(pname==0x8CA7u)*value=(GLint)im2_oes_binding(oes,IM2_OES_RB);
+    else glGetIntegerv(pname,value);
 }
 
 // ---------------------------------------------------------------- init / present
 
 void gles_init(void) {
     vglUseTripleBuffering(GL_FALSE);
-    vglInitExtended(0, SCR_W, SCR_H, 8 * 1024 * 1024, SCE_GXM_MULTISAMPLE_NONE);
-    glGenTextures(1, &fbo_tex);
-    glBindTexture(GL_TEXTURE_2D, fbo_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, FB_W, FB_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_tex, 0);
-    fbo_ready = fbo && fbo_tex &&
-        glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-    if(!fbo_ready)
-        l_error("vitaGL virtual 320x480 framebuffer is incomplete; EAGL will refuse presentation");
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glViewport(0, 0, FB_W, FB_H);
-    glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    l_info("vitaGL: FBO %ux%u -> screen %ux%u at x=%d", FB_W, FB_H, DST_W, DST_H, DST_X);
+    fbo_ready=vglInitExtended(0,SCR_W,SCR_H,8*1024*1024,SCE_GXM_MULTISAMPLE_NONE);
+    if(!fbo_ready){l_error("vitaGL initialization failed");return;}
+    oes=im2_oes_create((Im2OesBackend){NULL,native_new_fb,native_delete_fb,native_bind_fb,
+        native_storage,native_delete_storage,native_attach,native_check});
+    if(!oes){fbo_ready=0;l_error("OES framebuffer registry allocation failed");return;}
+    glViewport(0,0,FB_W,FB_H);
+    l_info("vitaGL initialized; guest must allocate and attach its OES drawable before presentation");
 }
 
-int gles_eagl_ready(void) {
-    return fbo_ready;
+int gles_eagl_ready(void){return fbo_ready && oes;}
+int gles_eagl_storage(uint32_t target,uint32_t format){
+    return target==IM2_OES_RB && gles_eagl_ready() &&
+        !im2_oes_storage(oes,format,FB_W,FB_H);
 }
-int gles_eagl_storage(uint32_t target) {
-    /* The virtual 320x480 iOS color renderbuffer is stored by the real
-     * vitaGL FBO texture. Never report YES without an allocated attachment. */
-    if(target != 0x8D41u || !fbo_ready)return 0;
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    int complete=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
-    eagl_storage_ready=complete;
-    return complete;
-}
-int gles_eagl_present(uint32_t target) {
-    if(target != 0x8D41u || !gles_eagl_storage(target))return 0;
-    gles_present(); /* Issues the actual VitaGL vglSwapBuffers call. */
-    return 1;
+int gles_eagl_present(uint32_t target){
+    if(target!=IM2_OES_RB || !gles_eagl_ready() || !im2_oes_drawable(oes,&fbo,&fbo_tex))return 0;
+    gles_present();return 1;
 }
 
 void gles_present(void) {
@@ -285,7 +298,7 @@ void gles_present(void) {
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(mode);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    im2_oes_bind(oes,IM2_OES_FB,im2_oes_binding(oes,IM2_OES_FB));
     glViewport(vp[0], vp[1], vp[2], vp[3]);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, env_mode);
@@ -319,7 +332,7 @@ const import_entry gles_imports[] = {
     D(glColorMask), D(glCullFace), D(glDepthFunc), D(glFrontFace), D(glPixelStorei),
     D(glActiveTexture), D(glBindTexture), D(glBlendFunc), D(glClear), D(glCopyTexImage2D),
     D(glCopyTexSubImage2D), D(glDeleteTextures), D(glDepthMask), D(glDisable), D(glDisableClientState),
-    D(glEnable), D(glEnableClientState), D(glGenTextures), D(glGetIntegerv), D(glIsEnabled),
+    D(glEnable), D(glEnableClientState), D(glGenTextures), F(glGetIntegerv,g_glGetIntegerv), F(glGetError,g_glGetError), D(glIsEnabled),
     D(glLoadIdentity), D(glLoadMatrixx), D(glMatrixMode), D(glOrthox), D(glPopMatrix), D(glPushMatrix),
     D(glRotatex), D(glScalex), D(glScissor), D(glShadeModel), D(glTexImage2D), D(glTexParameteri),
     D(glTexSubImage2D), D(glTranslatex), D(glViewport),
@@ -328,10 +341,10 @@ const import_entry gles_imports[] = {
     F(glVertexPointer, g_glVertexPointer), F(glTexCoordPointer, g_glTexCoordPointer),
     F(glClientActiveTexture, g_glClientActiveTexture), F(glDrawArrays, g_glDrawArrays),
     F(glGetPointerv, g_glGetPointerv),
-    F(glGenFramebuffersOES, g_glGenNames), F(glGenRenderbuffersOES, g_glGenNames),
-    F(glBindFramebufferOES, g_glBindFramebufferOES), F(glBindRenderbufferOES, g_glNoop),
-    F(glDeleteFramebuffersOES, g_glNoop), F(glDeleteRenderbuffersOES, g_glNoop),
-    F(glRenderbufferStorageOES, g_glNoop), F(glFramebufferRenderbufferOES, g_glNoop),
+    F(glGenFramebuffersOES, g_glGenFramebuffersOES), F(glGenRenderbuffersOES, g_glGenRenderbuffersOES),
+    F(glBindFramebufferOES, g_glBindFramebufferOES), F(glBindRenderbufferOES, g_glBindRenderbufferOES),
+    F(glDeleteFramebuffersOES, g_glDeleteFramebuffersOES), F(glDeleteRenderbuffersOES, g_glDeleteRenderbuffersOES),
+    F(glRenderbufferStorageOES, g_glRenderbufferStorageOES), F(glFramebufferRenderbufferOES, g_glFramebufferRenderbufferOES),
     F(glCheckFramebufferStatusOES, g_glCheckFramebufferStatusOES),
     F(glGetRenderbufferParameterivOES, g_glGetRenderbufferParameterivOES),
 };

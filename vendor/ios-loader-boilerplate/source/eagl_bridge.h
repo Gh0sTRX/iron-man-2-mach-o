@@ -9,10 +9,11 @@
 
 enum { IM2_EAGL_ES1 = 1u, IM2_GL_RENDERBUFFER_OES = 0x8D41u };
 typedef struct {
-    /* A graphics callback can only succeed after an actual VitaGL FBO exists.
-     * These are intentionally not fake/no-op renderer methods. */
+    /* ready checks backend initialization. Storage allocates real GPU resources;
+     * present additionally requires a complete framebuffer for the bound drawable.
+     * No callback may report success for an unperformed GPU operation. */
     int (*ready)(void);
-    int (*storage)(uint32_t target);
+    int (*storage)(uint32_t target,uint32_t color_format);
     int (*present)(uint32_t target);
 } Im2EaglBackend;
 

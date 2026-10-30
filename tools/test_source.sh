@@ -137,3 +137,8 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_collections
 build/host-runtime/test_collections
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I vendor/ios-loader-boilerplate/source tests/test_gles_oes.c \
+  vendor/ios-loader-boilerplate/source/gles_oes.c -o build/host-runtime/test_gles_oes
+build/host-runtime/test_gles_oes

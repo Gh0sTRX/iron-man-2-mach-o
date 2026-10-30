@@ -60,3 +60,17 @@ assert set(eagl)=={
 }
 assert all(target and kind==1 for target,kind in eagl.values()), 'EAGL NSString globals must be bound as data, never function thunks'
 print('PASS: linked ARM ELF includes ObjC message dispatch, UIApplicationMain and three EAGL NSString data constants')
+
+# Verify the actual linked OES import entries reach the stateful wrappers.
+gles_count=struct.unpack('<I',read(symbols['gles_imports_count'],4))[0]
+gles_entries={}
+for i in range(gles_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['gles_imports']+12*i,12))
+    gles_entries[cstring(name)]=(target,kind)
+for name in ('glGenFramebuffersOES','glGenRenderbuffersOES','glBindFramebufferOES',
+             'glBindRenderbufferOES','glDeleteFramebuffersOES','glDeleteRenderbuffersOES',
+             'glRenderbufferStorageOES','glFramebufferRenderbufferOES',
+             'glCheckFramebufferStatusOES','glGetRenderbufferParameterivOES',
+             'glGetIntegerv','glGetError'):
+    assert gles_entries['_'+name]==(symbols['g_'+name],0),name
+print('PASS: linked OES imports reach actual resource-mapping wrappers, not no-op callbacks')
