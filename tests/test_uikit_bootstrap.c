@@ -66,7 +66,7 @@ int main(void) {
     expected_imp=(void *)guest_launch;
     Im2ObjcClass *guest=im2_objc_register_foreign_class("AppController",
         (void *)(uintptr_t)0x24000000,(void *)(uintptr_t)0x24000020,
-        root,16,guest_ims,1,NULL,0);
+        root,12,guest_ims,1,NULL,0); /* Original class_ro_t.instance_size=12. */
     assert(guest);
     char arg0[]="IronMan2";
     char *argv[]={arg0,NULL};
