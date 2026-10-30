@@ -73,6 +73,17 @@ static void *get_view(void *controller) {
     const char *sel="view";
     return (void *)((uintptr_t(*)(void *,const char *))method(controller,sel))(controller,sel);
 }
+static void message_void0(void *receiver,const char *selector) {
+    ((void(*)(void *,const char *))method(receiver,selector))(receiver,selector);
+}
+static void message_void1(void *receiver,const char *selector,void *argument) {
+    ((void(*)(void *,const char *,void *))method(receiver,selector))(
+        receiver,selector,argument);
+}
+static void *message_obj0(void *receiver,const char *selector) {
+    return (void *)((uintptr_t(*)(void *,const char *))method(receiver,selector))(
+        receiver,selector);
+}
 static void assert_class(const char *name,const char *parent,uint32_t arm_size) {
     Im2ObjcClass *cls=im2_objc_class_named(name);
     Im2ObjcClass *p=im2_objc_class_named(parent);
@@ -125,6 +136,34 @@ int main(void) {
     assert(!im2_objc_release(v)); /* Controller still owns view. */
     assert(!im2_objc_release(controller)); /* Releases view too. */
     assert(im2_objc_retain_count(v)==0);
+
+    /* Inherited UIKit hierarchy must establish strong parent ownership and
+     * safely migrate an already attached subview without over-releasing it. */
+    void *window=im2_objc_alloc(im2_objc_class_named("UIWindow"),invoke_dealloc);
+    void *parent=im2_objc_alloc(im2_objc_class_named("UIView"),invoke_dealloc);
+    void *child=im2_objc_alloc(image,invoke_dealloc);
+    assert(window && parent && child);
+    assert(!message_obj0(child,"superview") && !message_obj0(child,"window"));
+    message_void1(window,"addSubview:",child);
+    assert(im2_objc_retain_count(child)==2);
+    assert(message_obj0(child,"superview")==window);
+    assert(message_obj0(child,"window")==window);
+    message_void1(window,"addSubview:",child);
+    assert(im2_objc_retain_count(child)==2);
+    message_void1(parent,"addSubview:",child);
+    assert(im2_objc_retain_count(child)==2);
+    assert(message_obj0(child,"superview")==parent);
+    assert(!message_obj0(child,"window"));
+    message_void1(window,"addSubview:",parent);
+    assert(message_obj0(child,"window")==window);
+    assert(im2_objc_retain_count(parent)==2);
+    message_void0(child,"removeFromSuperview");
+    assert(im2_objc_retain_count(child)==1);
+    assert(!message_obj0(child,"superview") && !message_obj0(child,"window"));
+    assert(!im2_objc_release(child));
+    assert(!im2_objc_release(parent)); /* UIWindow owns parent. */
+    assert(!im2_objc_release(window)); /* Recursively frees parent. */
+    assert(im2_objc_retain_count(parent)==0);
 
     /* The guest EAGLView requires its exact UIView superclass instance size. */
     Im2ObjcClass *eagl=im2_objc_register_foreign_class("EAGLView",
