@@ -1,11 +1,11 @@
 {
   "loader_objects_compiled": {
     "passed": true,
-    "evidence": "GitHub Actions success run 40979438904 (2026-10-30; head e7c662acfab9af1315f2fad88865237cdb9e486f), docs/CI_EVIDENCE_UIKIT_2026-10-30.json. Reproduces 28 ARM source units and linked ELF; no VPK."
+    "evidence": "GitHub Actions 40981471329 (head c13b483840d519337c1169118d0138bf6f83081f) passed: 29 VitaSDK ARM source units, full loader ELF, host ASan/UBSan with EAGLContext/CAEAGLLayer, ELF import kinds, ARM/Thumb Unicorn fixtures; no VPK. https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40981471329"
   },
   "loader_elf_linked": {
     "passed": true,
-    "evidence": "GitHub Actions success run 40979438904 (2026-10-30; head e7c662acfab9af1315f2fad88865237cdb9e486f), docs/CI_EVIDENCE_UIKIT_2026-10-30.json. Reproduces 28 ARM source units and linked ELF; no VPK."
+    "evidence": "GitHub Actions 40981471329 (head c13b483840d519337c1169118d0138bf6f83081f) passed: 29 VitaSDK ARM source units, full loader ELF, host ASan/UBSan with EAGLContext/CAEAGLLayer, ELF import kinds, ARM/Thumb Unicorn fixtures; no VPK. https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40981471329"
   },
   "all_original_imports_bound": {
     "passed": false,
