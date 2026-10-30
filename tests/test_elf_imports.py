@@ -47,4 +47,16 @@ for name in ('objc_getClass','CFStringGetCString','CFRelease','CFRetain','NSClas
 assert '_UIApplicationMain' in entries
 entry,kind=entries['_UIApplicationMain']
 assert entry and kind==0, 'Legacy UIApplicationMain must bind to the nonempty native C launch stage'
-print('PASS: linked ARM ELF contains four direct assembly dispatch imports and bridged C and UIApplicationMain imports')
+eagl_count=struct.unpack('<I',read(symbols['eagl_imports_count'],4))[0]
+assert eagl_count==3
+eagl={}
+for i in range(eagl_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['eagl_imports']+12*i,12))
+    eagl[cstring(name)]=(target,kind)
+assert set(eagl)=={
+    '_kEAGLDrawablePropertyRetainedBacking',
+    '_kEAGLDrawablePropertyColorFormat',
+    '_kEAGLColorFormatRGB565'
+}
+assert all(target and kind==1 for target,kind in eagl.values()), 'EAGL NSString globals must be bound as data, never function thunks'
+print('PASS: linked ARM ELF includes ObjC message dispatch, UIApplicationMain and three EAGL NSString data constants')
