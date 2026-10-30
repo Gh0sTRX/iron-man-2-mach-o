@@ -32,6 +32,15 @@ static void test_failure(void *controller) {
     int status;assert(waitpid(pid,&status,0)==pid);
     assert(WIFEXITED(status) && WEXITSTATUS(status)==73);
 }
+static Im2Rect32 get_rect(void *view,const char *selector) {
+    Im2ObjcTarget target={0};
+    assert(!im2_objc_lookup_target(view,selector,NULL,&target));
+    assert(!target.guest && target.stret_size==sizeof(Im2Rect32));
+    Im2Rect32 out={0};
+    ((void(*)(Im2Rect32 *,void *,const char *))target.imp)(
+        &out,view,selector);
+    return out;
+}
 static void set_hidden(void *view,int value) {
     const char *sel="setHidden:";
     ((void(*)(void *,const char *,int))method(view,sel))(view,sel,value);
@@ -95,8 +104,17 @@ int main(void) {
     assert(init_frame(v,frame)==v);
     assert(!im2_uikit_view_frame(v,&actual));
     assert(actual.x==12 && actual.y==21 && actual.width==480 && actual.height==320);
+    Im2Rect32 frame_return=get_rect(v,"frame");
+    Im2Rect32 bounds_return=get_rect(v,"bounds");
+    assert(frame_return.x==12 && frame_return.y==21 &&
+           frame_return.width==480 && frame_return.height==320);
+    assert(bounds_return.x==0 && bounds_return.y==0 &&
+           bounds_return.width==480 && bounds_return.height==320);
     set_frame(v,(Im2Rect32){0,0,240,160});
     assert(!im2_uikit_view_frame(v,&actual) && actual.width==240);
+    bounds_return=get_rect(v,"bounds");
+    assert(bounds_return.width==240 && bounds_return.height==160);
+
     set_hidden(v,3);assert(hidden(v)==1);
     set_hidden(v,0);assert(hidden(v)==0);
     set_tag(v,108);assert(tag(v)==108);
