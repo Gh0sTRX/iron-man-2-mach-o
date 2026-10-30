@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-30",
+  "branch": "experiment/ios-macho-loader",
+  "github_actions_run_id": 40979438904,
+  "github_actions_url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/40979438904",
+  "head_sha": "e7c662acfab9af1315f2fad88865237cdb9e486f",
+  "conclusion": "success",
+  "checks": {
+    "host_runtime_asan_ubsan": {
+      "passed": true,
+      "includes": [
+        "UIScreen CGRect stret",
+        "AppController guest launch delegate",
+        "UIApplication singleton and UIWindow ownership",
+        "UIView parenting/bounds/invalidation",
+        "NSData NSURL Foundation",
+        "NSFileManager",
+        "NSURLRequest",
+        "Objective-C metadata/rebase"
+      ]
+    },
+    "vitasdk_arm_objects": {
+      "passed": true,
+      "source_units": 28
+    },
+    "full_loader_elf": {
+      "passed": true,
+      "source_path": "build/loader-full/im2_ios_loader"
+    },
+    "linked_elf_import_ABI": {
+      "passed": true
+    },
+    "arm_thumb_assembly_emulation": {
+      "passed": true,
+      "cases": 23
+    },
+    "vpk_blocking_release_check": {
+      "passed": true,
+      "vpk_created": false
+    }
+  },
+  "limits": {
+    "all_original_imports_bound": false,
+    "original_game_executed_in_native_loader": false,
+    "physical_vita_test": false,
+    "uikit_event_render_loop": false,
+    "guest_rx_cache_verified": false,
+    "legal_assets_provenance_verified": false
+  },
+  "note": "The successful job compiles/links the compatibility loader but does not boot the original iOS game. No SELF/VPK built."
+}
