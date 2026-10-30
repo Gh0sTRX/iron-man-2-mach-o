@@ -29,6 +29,10 @@
 #include "eagl_bridge.h"
 #include "gles.h"
 #include "timers.h"
+#include "numbers.h"
+#include "defaults.h"
+#include <psp2/apputil.h>
+#include <psp2/system_param.h>
 #include "uikit_loop.h"
 #include "input.h"
 #include <psp2/kernel/processmgr.h>
@@ -39,7 +43,7 @@
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[55];
+static import_entry class_imports[59];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -67,15 +71,17 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_CALayer","_OBJC_METACLASS_$_CALayer",
         "_OBJC_CLASS_$_CAEAGLLayer","_OBJC_METACLASS_$_CAEAGLLayer",
         "_OBJC_CLASS_$_EAGLContext","_OBJC_METACLASS_$_EAGLContext",
-        "_OBJC_CLASS_$_NSTimer","_OBJC_METACLASS_$_NSTimer"};
-    for(size_t i=0;i<54;i++) {
+        "_OBJC_CLASS_$_NSTimer","_OBJC_METACLASS_$_NSTimer",
+        "_OBJC_CLASS_$_NSNumber","_OBJC_METACLASS_$_NSNumber",
+        "_OBJC_CLASS_$_NSUserDefaults","_OBJC_METACLASS_$_NSUserDefaults"};
+    for(size_t i=0;i<58;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[54]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[58]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -412,6 +418,11 @@ void objc_init(void) {
     const Im2FoundationConfig foundation={BUNDLE_PATH,(Im2Imp)string_format,foundation_failure,darwin_path};
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
     if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
+    if(im2_numbers_init(root))fatal_error("NSNumber registration failed");
+    _Static_assert(SCE_SYSTEM_PARAM_LANG_ENGLISH_US==1 && SCE_SYSTEM_PARAM_LANG_PORTUGUESE_BR==17 && SCE_SYSTEM_PARAM_LANG_ENGLISH_GB==18 && SCE_SYSTEM_PARAM_LANG_TURKISH==19,"Vita language enumeration changed");
+    int language=-1;
+    if(sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG,&language)<0 || !im2_vita_language_code(language))fatal_error("Vita system language query failed; no guessed AppleLanguages preference");
+    if(im2_defaults_init(root,im2_vita_language_code(language),DATA_PATH "Library/Preferences/com.gameloft.IronMan2.plist"))fatal_error("NSUserDefaults fresh language domain unavailable; existing preference plists require real parsing support");
     if(im2_url_init(root,foundation_failure))fatal_error("NSURL registration failed");
     if(im2_url_request_init(root,foundation_failure))fatal_error("NSURLRequest registration failed");
     if(im2_file_manager_init(root))fatal_error("NSFileManager registration failed");
@@ -432,7 +443,7 @@ void objc_init(void) {
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<55;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<59;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 

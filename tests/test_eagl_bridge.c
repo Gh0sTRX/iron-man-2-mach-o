@@ -7,6 +7,7 @@
 #include "uikit_hierarchy.h"
 #include "foundation.h"
 #include "collections.h"
+#include "numbers.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -68,6 +69,8 @@ int main(void) {
     Im2FoundationConfig config={"/tmp",NULL,NULL,NULL};
     assert(!im2_foundation_init(root,&config));
     assert(!im2_collections_init(root,NULL));
+    assert(!im2_numbers_init(root));
+    void *pool=im2_objc_alloc(root,NULL);assert(pool && !im2_objc_pool_push(pool));
     assert(!im2_uikit_hierarchy_init(root,NULL));
     assert(!im2_eagl_init(root,NULL));
     assert(im2_eagl_init(root,NULL));
@@ -169,6 +172,22 @@ int main(void) {
     assert(presented==2);
     send_void1(layer,"setDrawableProperties:",NULL);expected_format=IM2_OES_RGBA8;storage_success=1;
     assert(send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer));
+    void *no=send_uint(im2_objc_class_named("NSNumber"),"numberWithBool:",0),*yes=send_uint(im2_objc_class_named("NSNumber"),"numberWithBool:",1);assert(no && yes);
+    assert(im2_objc_retain(no)==no && im2_objc_retain(yes)==yes);
+    void *no_properties=im2_dictionary_create(&no,&backing_key,1,0,0);
+    void *yes_properties=im2_dictionary_create(&yes,&backing_key,1,0,0);assert(no_properties && yes_properties);
+    send_void1(layer,"setDrawableProperties:",no_properties);
+    assert(send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer));
+    void *both_keys[]={backing_key,key},*both_values[]={no,value};
+    void *both=im2_dictionary_create(both_values,both_keys,2,0,0);assert(both);
+    send_void1(layer,"setDrawableProperties:",both);expected_format=IM2_OES_RGB565;
+    assert(send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer));
+    int before=stored;
+    send_void1(layer,"setDrawableProperties:",yes_properties);
+    assert(!send_bool_uint_object(context,"renderbufferStorage:fromDrawable:",IM2_GL_RENDERBUFFER_OES,layer) && stored==before);
+    send_void1(layer,"setDrawableProperties:",NULL);
+    assert(!im2_objc_release(no_properties) && !im2_objc_release(yes_properties) && !im2_objc_release(both));
+    assert(!im2_objc_release(no) && !im2_objc_release(yes));
     ready=0;
     assert(!send_bool_uint(context,"presentRenderbuffer:",IM2_GL_RENDERBUFFER_OES));
     assert(presented==2);
@@ -183,6 +202,7 @@ int main(void) {
     assert(im2_objc_retain_count(layer)==0);
     assert(!im2_objc_release(ordinary));
     assert(im2_objc_retain_count(properties)==0);
+    assert(!im2_objc_pool_drain(pool) && !im2_objc_retain_count(no) && !im2_objc_retain_count(yes));
     puts("PASS: EAGL original class identities, exact constant data pointers, UIView.layer, real context/thread state and GPU-failure gates");
     return 0;
 }

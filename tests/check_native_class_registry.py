@@ -68,5 +68,10 @@ assert "source/timers.c" in cmake and "source/uikit_loop.c" in cmake
 assert "tests/test_timers.c" in runner
 assert "im2_uikit_loop_run(" in src, 'UIApplicationMain must enter the native timer driver'
 
+assert "im2_numbers_init(root)" in src and "im2_defaults_init(root," in src
+assert "source/numbers.c" in cmake and "source/defaults.c" in cmake
+assert "tests/test_numbers_defaults.c" in runner
+assert "sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG" in src
+
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
 sys.exit(0)
