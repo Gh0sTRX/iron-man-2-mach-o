@@ -32,7 +32,7 @@ def analyze(ipa: Path, source: Path):
     text = source.read_text(encoding="utf-8")
     # These are the explicitly registered static class imports, not proof that
     # an imported class implements its methods or is ABI-compatible.
-    declared = set(re.findall(r'"(_OBJC_(?:META)?CLASS_\\$_[A-Za-z0-9_]+)"', text))
+    declared = set(re.findall(r'"(_OBJC_(?:META)?CLASS_[$]_[A-Za-z0-9_]+)"', text))
     missing = {key: count for key, count in sorted(needed.items()) if key not in declared}
     return {"required_symbols": len(needed),
             "required_slots": sum(needed.values()),
