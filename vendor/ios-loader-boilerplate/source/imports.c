@@ -16,6 +16,7 @@ static const struct {
     {gles_imports, &gles_imports_count},
     {coreaudio_imports, &coreaudio_imports_count},
     {objc_imports, &objc_imports_count},
+    {eagl_imports, &eagl_imports_count},
 };
 
 const import_entry *imports_lookup(const char *name) {
