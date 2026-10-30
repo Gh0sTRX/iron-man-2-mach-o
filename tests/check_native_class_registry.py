@@ -47,6 +47,11 @@ assert "tests/test_uikit_bootstrap.c" in runner,"Bootstrap behavioral tests abse
 assert 'im2_uikit_screen_init(root,(Im2ScreenGeometry){320.f,480.f})' in src, "Owner UIScreen geometry registration missing"
 assert "source/uikit_screen.c" in cmake, "UIScreen missing from Vita CMake"
 assert "tests/test_uikit_screen.c" in runner, "UIScreen native CGRect tests absent"
+assert "im2_eagl_init(root,foundation_failure)" in src, "Original EAGL classes not initialized"
+assert "gles_eagl_ready,gles_eagl_storage,gles_eagl_present" in src, "VitaGL EAGL callback not wired"
+assert "source/eagl_bridge.c" in cmake, "EAGL classes not linked into Vita ARM loader"
+assert "tests/test_eagl_bridge.c" in runner, "EAGL native host ABI tests absent"
+
 
 
 print(f"PASS: {len(names)//2} native Objective-C classes, class/metaclass imports, CFString entry, new module startup and test wiring")
