@@ -175,5 +175,12 @@
   },
   "production_arm_c_text_calls": 56,
   "libc_text_imports": 10,
-  "texture_present_source_commit": "f2e6479a0c22d9a501d5e992d610e1b85817223f"
+  "texture_present_source_commit": "f2e6479a0c22d9a501d5e992d610e1b85817223f",
+  "latest_source_commit": "b8d28e9d87d4213d5ddc79a2661c03c94da6c310",
+  "latest_github_ci": {
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41234125101",
+    "job_started": false,
+    "tests_executed": false,
+    "reason": "GitHub account recent payment failure or spending limit; runner job was not started. Local verification passed; no CI success claimed."
+  }
 }

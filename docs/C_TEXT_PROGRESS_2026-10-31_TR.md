@@ -21,3 +21,7 @@ Tam VitaSDK ELF bağlantısı ve host ASan/UBSan regresyonları geçer. Özgün 
 Native C-library locale davranışı kullanılır. C-locale ASCII dönüşümü sınandı; başka locale'ler, locale emülasyonu ve Darwin errno numarası uyarlaması bu modülle çözülmedi. Caller geçerli sonlandırılmış metin/buffer sağlamalıdır. `atol` taşma davranışı için yeni bir sözleşme icat edilmedi; yalnız representable signed32 değerleri doğrulandı.
 
 Bu turda grafik/doku/sunum grubundaki 9 bağlantının ardından 10 temel C bağlantısı daha eklendi. Güncel 490 importun 324'ü ad olarak eşleşir, **166'sı eksiktir**. Tamamlanma yüzdesi değildir. Framework/C++/dosya/thread/ses ve gerçek native boot/device doğrulaması devam eder. SELF/VPK oluşturulmadı; yürütme ve release korumaları korunur.
+
+## GitHub CI
+
+Kaynak `b8d28e9d87d4213d5ddc79a2661c03c94da6c310`, [Actions 41234125101](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41234125101): hesap ödeme/harcama limiti uyarısıyla iş hiç başlamadı; test adımı yoktur. CI başarısı iddia edilmez. Yukarıdaki sonuçlar yerel managed ortamdan alınmıştır. Hesap ayarları değiştirilmedi ve engelli iş yeniden başlatılmadı. Bu kaynak, önceki doku/sunum düzeltmesini de içerir.
