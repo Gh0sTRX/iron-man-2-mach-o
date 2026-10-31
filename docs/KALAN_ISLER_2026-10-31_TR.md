@@ -17,6 +17,7 @@ Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştir
 | CF dizileri | Ölçülen NULL callback yolu: borrowed değerler, default allocator verisi; gerçek runtime ile 118 ARM çağrısı | Genel toll-free/custom callback desteği değil |
 | Liste/sözlük/sayı | Sahipliği yönetilen collection'lar ve integral NSNumber | Bazı metot/formatlar eksik |
 | C metin/numeric ABI | 10 SDK importu, 32-bit wide metin ve unsigned64→double; 56 gerçek ARM çağrısı | C-locale ASCII sınandı; locale/errno uyumu açık |
+| Saat/NSDate | 1970/2001 epoch ve UTC tm dönüşümü, kısmi NSDate; gerçek objc_msgSend ile 56 ARM çağrısı | RTC, timezone/formatter ve yerel saat doğrulaması açık |
 | C++ sayıdan metin | 8 stream/Init importu; 112 ARM çağrısı ve özgün inline width/fill düzeni | Genel C++ exception/RTTI değil |
 | Eski C++ metin sistemi | 24 import: COW string ve atomik referans sayacı; 32 gerçek ARM çağrı testi | Tam C++ exception/RTTI/iostream uyumluluğu değil |
 | C++ listeler/ağaçlar | 8 import; SDK algoritmalarıyla düğüm ekleme/silme/splice/iterator, 948 ARM çağrısı | Bütün STL/iostream/RTTI desteği değil |
@@ -34,7 +35,7 @@ Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştir
 
 ### 1. İlk gerçek açılışı engelleyen iOS bağımlılıkları
 
-Özgün 490 import adının **332'si** tablolarla eşleşiyor; **158 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **25'i kısmi**, **39'u uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
+Özgün 490 import adının **337'si** tablolarla eşleşiyor; **153 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **26'sı kısmi**, **38'i uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
 
 Eksik Apple/CoreFoundation/UIKit API'leri, C/C++ runtime bağlantıları, bazı GLES çağrıları ve sistem/dosya/ağ işlevleri gerçek davranışlarıyla ele alınmalı. `NSLocale`, `NSRunLoop`, çeşitli UIKit/medya sınıfları hâlâ eksik örneklerdir. NSBundle/tercih plist okuma ve gerekirse diğer veri formatları tamamlanmalı; oyun sürümü/ayarları uydurulmamalı.
 
@@ -74,14 +75,14 @@ CFBundleGetMainBundle, CFBundleCopyBundleURL, CFBundleCopyResourcesDirectoryURL,
 
 ## Son kontrol sayıları
 
-- 47 C/C++/ASM biriminin VitaSDK ARM ELF bağlantısı başarılı; güçlü undefined ELF sembolü yok.
+- 48 C/C++/ASM biriminin VitaSDK ARM ELF bağlantısı başarılı; güçlü undefined ELF sembolü yok.
 - Yerel host ASan/UBSan testleri başarılı; yeni CFBundle testi gerçek import router'ını ve kaynak dosyası byte'larını kullanıyor.
 - Üretim assembly'siyle 25 sentetik ARM/Thumb dispatch ve 6 üretim UIKit CGRect ABI emülasyon senaryosu başarılı.
 - Özgün oyunun native Vita boot'u, menü ve cihaz testi: **doğrulanmadı**.
 
 Tam eksik isim envanteri [REMAINING_BINDINGS_2026-10-31.json](REMAINING_BINDINGS_2026-10-31.json), yerel derleme kanıtı [BUILD_EVIDENCE_2026-10-31.json](BUILD_EVIDENCE_2026-10-31.json) içindedir.
 
-**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 158 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
+**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 153 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
 
 Yeni C++ katmanı ve özgün çağrı yerleri: [LEGACY_CPP_PROGRESS_2026-10-31_TR.md](LEGACY_CPP_PROGRESS_2026-10-31_TR.md).
 
@@ -100,3 +101,5 @@ Doku, sorgu ve üretim sunum akışı: [TEXTURE_PRESENT_PROGRESS_2026-10-31_TR.m
 C metinleri ve sayı dönüşümü: [C_TEXT_PROGRESS_2026-10-31_TR.md](C_TEXT_PROGRESS_2026-10-31_TR.md).
 
 C++ stream ve inline ABI: [CPP_STREAM_PROGRESS_2026-10-31_TR.md](CPP_STREAM_PROGRESS_2026-10-31_TR.md).
+
+Zaman ve NSDate: [TIME_DATE_PROGRESS_2026-10-31_TR.md](TIME_DATE_PROGRESS_2026-10-31_TR.md).

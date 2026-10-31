@@ -18,6 +18,7 @@ static const struct {
     {legacy_string_imports, &legacy_string_imports_count},
     {patch_imports, &patch_imports_count},
     {libc_text_imports, &libc_text_imports_count},
+    {time_bridge_imports, &time_bridge_imports_count},
     {darwin_imports, &darwin_imports_count},
     {gles_float_imports, &gles_float_imports_count},
     {gles_imports, &gles_imports_count},

@@ -218,3 +218,9 @@ c++ -std=c++11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-f
   -I vendor/ios-loader-boilerplate/source tests/test_legacy_streams.cpp \
   vendor/ios-loader-boilerplate/source/legacy_streams.cpp -o build/host-runtime/test_legacy_streams
 build/host-runtime/test_legacy_streams
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_time_bridge.c \
+  vendor/ios-loader-boilerplate/source/time_bridge.c vendor/ios-loader-boilerplate/source/imports.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -Wl,--wrap=gettimeofday -lm -o build/host-runtime/test_time_bridge
+build/host-runtime/test_time_bridge

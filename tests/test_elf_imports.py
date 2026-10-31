@@ -200,3 +200,13 @@ for i in range(stream_count):
     assert target and kind==0;stream_entries[cstring(name)]=target
 assert len(stream_entries)==8 and '__ZNSolsEi' in stream_entries
 print('PASS: eight legacy C++ stream/Init bindings linked as explicit exception-contained bridges')
+
+time_count=struct.unpack('<I',read(symbols['time_bridge_imports_count'],4))[0]
+assert time_count==4
+time_entries={}
+for i in range(time_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['time_bridge_imports']+12*i,12))
+    time_entries[cstring(name)]=(target,kind)
+assert time_entries=={'_CFAbsoluteTimeGetCurrent':(symbols['cf_now'],0),'_time':(symbols['time_now'],0),
+                      '_difftime':(symbols['time_difference'],0),'_gmtime':(symbols['utc'],0)}
+print('PASS: CF/Unix time and Darwin UTC calendar imports route to typed ABI bridges')

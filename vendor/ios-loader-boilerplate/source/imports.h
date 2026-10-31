@@ -42,6 +42,9 @@ extern const int legacy_string_imports_count;
 extern const import_entry libc_text_imports[];
 extern const int libc_text_imports_count;
 
+extern const import_entry time_bridge_imports[];
+extern const int time_bridge_imports_count;
+
 extern const import_entry darwin_imports[];
 extern const int darwin_imports_count;
 

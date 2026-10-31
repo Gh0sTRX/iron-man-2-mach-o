@@ -21,7 +21,7 @@ for base,size in ((STACK,0x10000),(HEAP,0x100000),(OBJECT,0x10000),(STOP,0x1000)
 u.reg_write(UC_ARM_REG_C1_C0_2,0x00f00000);u.reg_write(UC_ARM_REG_FPEXC,0x40000000)
 next_alloc=HEAP;live={};calls=0
 
-gles_capture={};gles_seen=[];once_seen=set()
+gles_capture={};gles_seen=[];once_seen=set();tls_values={};tls_next=1
 ONCE_RETURN=STOP+0x200
 u.mem_write(ONCE_RETURN,struct.pack("<3I",0xe49de008,0xe3a00000,0xe12fff1e))
 
@@ -32,6 +32,7 @@ def allocate(n):
  live[ptr]=n;u.mem_write(ptr,bytes(n));return ptr
 
 def hook(uc,addr,size,_):
+ global tls_next
  def matches(*names):return any(addr==(symbols[n]&~1) for n in names if n in symbols)
  def arg(n):return uc.reg_read((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2)[n])
  def returned(value=None):
@@ -64,7 +65,16 @@ def hook(uc,addr,size,_):
   ptr=arg(int(matches('_free_r')))
   if ptr:assert ptr in live;del live[ptr]
   returned()
+ elif matches('pthread_key_create'):
+  uc.mem_write(arg(0),struct.pack('<I',tls_next));tls_values[tls_next]=0;tls_next+=1;returned(0)
+ elif matches('pthread_getspecific'):
+  returned(tls_values.get(arg(0),0))
+ elif matches('pthread_setspecific'):
+  tls_values[arg(0)]=arg(1);returned(0)
+ elif matches('pthread_key_delete'):
+  tls_values.pop(arg(0),None);returned(0)
  elif matches('pthread_once'):
+
   control=arg(0);callback=arg(1)
   if control in once_seen:returned(0)
   else:
@@ -99,13 +109,13 @@ for i in range(struct.unpack('<I',read(symbols['legacy_string_imports_count'],4)
 
 def call(name,args,misalign=0):
  global calls
- target,kind=entries[name if name.startswith('_') else '__'+name];assert kind==0
+ target,kind=entries[name if name.startswith('_') else '__'+name];assert kind in (0,2)
  sp=STACK+0x8000+misalign
  u.reg_write(UC_ARM_REG_SP,sp);u.reg_write(UC_ARM_REG_LR,STOP);u.reg_write(UC_ARM_REG_R12,target)
  u.reg_write(UC_ARM_REG_R9,0x12345678)
  for reg,v in zip((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3),(args+[0]*4)[:4]):u.reg_write(reg,v)
  words=args[4:]+[0]*16;u.mem_write(sp,struct.pack('<'+'I'*len(words),*words))
- try: u.emu_start(symbols['ml_align_call'],STOP,count=500000)
+ try: u.emu_start(target if kind==2 else symbols['ml_align_call'],STOP,count=500000)
  except Exception as ex: raise AssertionError(f'{name}: PC={u.reg_read(UC_ARM_REG_PC):x} LR={u.reg_read(UC_ARM_REG_LR):x}') from ex
  assert u.reg_read(UC_ARM_REG_PC)==STOP and u.reg_read(UC_ARM_REG_SP)==sp
  assert u.reg_read(UC_ARM_REG_R9)==0x12345678
@@ -762,3 +772,54 @@ call(INITDTOR,[INIT])
 assert bytes(u.mem_read(INIT+1,3))==init_padding
 assert pointer(INIT-4)==GUARD and pointer(INIT+4)==GUARD
 print(f'PASS: {calls-stream_start} production ARM legacy stream calls, 180-byte complete object/40-byte stringbuf/+44 virtual-ios layout, signed int/long formatting, hidden COW result, widen and Init lifecycle. OS/thread/stdio services remain fixture scoped.')
+
+# Production NSDate dispatch through real objc_msgSend and autorelease runtime.
+for table in ('time_bridge_imports','objc_imports'):
+ n=struct.unpack('<I',read(symbols[table+'_count'],4))[0]
+ for i in range(n):
+  name,t,k=struct.unpack('<III',read(symbols[table]+12*i,12));entries[cstring(name)]=(t,k)
+for name in ('im2_dates_init','im2_objc_class_named','im2_objc_pool_push','im2_objc_pool_drain'):
+ entries['__'+name]=(symbols[name],0)
+wall_seconds=978307200;wall_usec=250000
+
+def clock_hook(uc,address,size,_):
+ if address!=(symbols['gettimeofday']&~1):return
+ uc.mem_write(uc.reg_read(UC_ARM_REG_R0),struct.pack('<ii',wall_seconds,wall_usec))
+ uc.reg_write(UC_ARM_REG_R0,0);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+u.hook_add(UC_HOOK_CODE,clock_hook)
+time_start=calls
+assert call('im2_dates_init',[root])==0
+LABEL=OBJECT+0xc000;OUT=LABEL+256;SELECTOR=OUT+256
+u.mem_write(LABEL,b'NSDate\0');date_class=call('im2_objc_class_named',[LABEL]);assert date_class
+
+def read_double(lo):return struct.unpack('<d',struct.pack('<II',lo,u.reg_read(UC_ARM_REG_R1)))[0]
+def send(obj,name,args,align):
+ u.mem_write(SELECTOR,name.encode()+b'\0')
+ return call('_objc_msgSend',[obj,SELECTOR]+args,align)
+for align in (0,4):
+ wall_seconds=978307200;wall_usec=250000
+ u.reg_write(UC_ARM_REG_D0,0x7ff8000000000000)
+ assert read_double(call('_CFAbsoluteTimeGetCurrent',[],align))==.25
+ put(OUT,0xa5a5a5a5,GUARD);assert call('_time',[OUT],align)==wall_seconds and pointer(OUT)==wall_seconds and pointer(OUT+4)==GUARD
+ assert read_double(call('_difftime',[0x7fffffff,0x80000000],align))==4294967295.
+ for seconds,expected in ((0,(0,0,0,1,0,70,4,0,0,0)),(951782400,(0,0,0,29,1,100,2,59,0,0)),(0x7fffffff,(7,14,3,19,0,138,2,18,0,0))):
+  put(OUT,seconds);p=call('_gmtime',[OUT],align);assert p
+  assert struct.unpack('<10i',u.mem_read(p,40))==expected
+  zone=pointer(p+40);assert bytes(u.mem_read(zone,4))==b'GMT\0'
+ pool=call('im2_objc_alloc',[root,0],align);assert call('im2_objc_pool_push',[pool],align)==0
+ a=send(date_class,'date',[],align);b=send(date_class,'dateWithTimeIntervalSinceReferenceDate:',words(0.),align);assert a and b
+ assert read_double(send(a,'timeIntervalSince1970',[],align))==978307200.25
+ assert read_double(send(a,'timeIntervalSinceReferenceDate',[],align))==.25
+ assert read_double(send(a,'timeIntervalSinceDate:',[b],align))==.25
+ assert send(a,'compare:',[b],align)==1 and send(b,'compare:',[a],align)==0xffffffff
+ assert send(a,'copy',[],align)==a and call('im2_objc_retain_count',[a],align)==2
+ call('_CFRelease',[a],align)
+ c=call('im2_objc_alloc',[date_class,0],align)
+ assert send(c,'initWithTimeIntervalSince1970:',words(-1.),align)==c
+ assert read_double(send(c,'timeIntervalSince1970',[],align))==-1.
+ assert send(c,'initWithTimeIntervalSinceReferenceDate:',words(1e-9),align)==c
+ assert read_double(send(c,'timeIntervalSinceReferenceDate',[],align))==1e-9
+ call('_CFRelease',[c],align)
+ assert call('im2_objc_pool_drain',[pool],align)==0
+ assert call('im2_objc_retain_count',[a],align)==0 and call('im2_objc_retain_count',[b],align)==0
+print(f'PASS: {calls-time_start} actual ARM time/NSDate calls, real objc_msgSend double inputs/results, UTC 44-byte calendar, 1970/2001 epochs, nanosecond reference precision and real autorelease cleanup. Wall clock/TLS OS services modeled; no hardware time verification.')

@@ -31,6 +31,7 @@
 #include "gles.h"
 #include "timers.h"
 #include "numbers.h"
+#include "time_bridge.h"
 #include "defaults.h"
 #include "sets.h"
 #include "touches.h"
@@ -46,7 +47,7 @@
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[65];
+static import_entry class_imports[67];
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -79,15 +80,16 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_NSUserDefaults","_OBJC_METACLASS_$_NSUserDefaults",
         "_OBJC_CLASS_$_NSSet","_OBJC_METACLASS_$_NSSet",
         "_OBJC_CLASS_$_UITouch","_OBJC_METACLASS_$_UITouch",
-        "_OBJC_CLASS_$_UIEvent","_OBJC_METACLASS_$_UIEvent"};
-    for(size_t i=0;i<64;i++) {
+        "_OBJC_CLASS_$_UIEvent","_OBJC_METACLASS_$_UIEvent",
+        "_OBJC_CLASS_$_NSDate","_OBJC_METACLASS_$_NSDate"};
+    for(size_t i=0;i<66;i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[64]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[66]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -425,6 +427,7 @@ void objc_init(void) {
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
     if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
     if(im2_cfarrays_init(root))fatal_error("CFArray registration failed");
+    if(im2_dates_init(root))fatal_error("NSDate registration failed");
     if(im2_numbers_init(root))fatal_error("NSNumber registration failed");
     if(im2_sets_init(root))fatal_error("NSSet registration failed");
     _Static_assert(SCE_SYSTEM_PARAM_LANG_ENGLISH_US==1 && SCE_SYSTEM_PARAM_LANG_PORTUGUESE_BR==17 && SCE_SYSTEM_PARAM_LANG_ENGLISH_GB==18 && SCE_SYSTEM_PARAM_LANG_TURKISH==19,"Vita language enumeration changed");
@@ -452,7 +455,7 @@ void objc_init(void) {
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<65;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<67;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 
