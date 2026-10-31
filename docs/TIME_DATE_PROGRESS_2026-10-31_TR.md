@@ -36,3 +36,7 @@ Tam VitaSDK ELF linki, güçlü undefined kontrolü ve diğer host/ARM regresyon
 Yalnız finite NSDate aralıkları ve desteklenen concrete sınıf yolları kabul edilir. Saat erişim hatasında CF/NSDate tarafı açıklayıcı fatal hata verir; C time -1 döner. Hostta signed32 dışındaki native clock değeri EOVERFLOW ile reddedilir; pinned SDK time_t zaten signed32'dir, 2038 sonrası RTC kapsamı iddia edilmez. Localtime/mktime/strftime, NSDateFormatter ve timezone/locale entegrasyonu hâlâ açık.
 
 490 importun **337 adı eşleşir, 153'ü eksiktir**; sayı tamamlanma yüzdesi değildir. Gerekli 64 harici sınıfın 26'sı kısmi, 38'i uygulanmamıştır. NSDate dahil eklenen sınıflar bütün Foundation/UIKit davranışlarıyla tamamlanmış sayılmaz.
+
+## GitHub CI
+
+Kaynak `b448184449cc0eb34c916e9992d151f643bc8e2a`, [Actions 41237030060](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41237030060): hesap ödeme/harcama limiti uyarısıyla iş başlamadı, test adımı yoktur. Sonuçlar yerel managed ortamdan alınmıştır; yeni kaynak için CI başarısı iddia edilmez. Hesap ayarları değiştirilmedi ve engelli iş yeniden başlatılmadı.
