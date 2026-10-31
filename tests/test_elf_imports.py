@@ -191,3 +191,12 @@ for name in ('atol','strcasecmp','strncasecmp','strlcpy','strcoll','wcscmp','wcs
     assert text_entries['_'+name]==(symbols[name],0)
 assert text_entries['___floatundidf']==(symbols['text_u64_double'],0)
 print('PASS: nine native C text functions and explicit unsigned64-to-double base-AAPCS helper linked')
+
+stream_count=struct.unpack('<I',read(symbols['legacy_stream_imports_count'],4))[0]
+assert stream_count==8
+stream_entries={}
+for i in range(stream_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['legacy_stream_imports']+12*i,12))
+    assert target and kind==0;stream_entries[cstring(name)]=target
+assert len(stream_entries)==8 and '__ZNSolsEi' in stream_entries
+print('PASS: eight legacy C++ stream/Init bindings linked as explicit exception-contained bridges')

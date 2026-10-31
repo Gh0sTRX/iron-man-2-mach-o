@@ -29,6 +29,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/cg_geometry.c
   source/math_bridge.c
   source/legacy_containers.cpp
+  source/legacy_streams.cpp
   source/legacy_string.cpp
   source/imports.c
   source/libc_text.c

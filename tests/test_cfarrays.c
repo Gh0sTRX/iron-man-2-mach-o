@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #define EMPTY(name) const import_entry name##_imports[]={{"_unused",0,0}};const int name##_imports_count=0
 EMPTY(patch);EMPTY(libc_text);EMPTY(darwin);EMPTY(gles_float);EMPTY(gles);EMPTY(coreaudio);EMPTY(objc);EMPTY(eagl);EMPTY(cfbundle);
-EMPTY(legacy_string);EMPTY(legacy_container);EMPTY(math_bridge);EMPTY(cg_geometry);
+EMPTY(legacy_stream);EMPTY(legacy_string);EMPTY(legacy_container);EMPTY(math_bridge);EMPTY(cg_geometry);
 const import_entry *objc_class_import(const char *n){(void)n;return NULL;}
 void fatal_error(const char *fmt,...){assert(strstr(fmt,"CFArray") || strstr(fmt,"CFRelease") || strstr(fmt,"CFRetain") || strstr(fmt,"CF array"));_Exit(73);}
 static uintptr_t address(const char *n){const import_entry *p=imports_lookup(n);assert(p && p->data==0 && p->addr);return p->addr;}

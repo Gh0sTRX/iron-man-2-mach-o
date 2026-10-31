@@ -213,3 +213,8 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -I vendor/ios-loader-boilerplate/source tests/test_gles_arrays.c \
   vendor/ios-loader-boilerplate/source/gles_arrays.c -Wl,--wrap=realloc -o build/host-runtime/test_gles_arrays
 build/host-runtime/test_gles_arrays
+
+c++ -std=c++11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I vendor/ios-loader-boilerplate/source tests/test_legacy_streams.cpp \
+  vendor/ios-loader-boilerplate/source/legacy_streams.cpp -o build/host-runtime/test_legacy_streams
+build/host-runtime/test_legacy_streams

@@ -32,6 +32,9 @@ extern const int math_bridge_imports_count;
 extern const import_entry legacy_container_imports[];
 extern const int legacy_container_imports_count;
 
+extern const import_entry legacy_stream_imports[];
+extern const int legacy_stream_imports_count;
+
 extern const import_entry legacy_string_imports[];
 extern const int legacy_string_imports_count;
 

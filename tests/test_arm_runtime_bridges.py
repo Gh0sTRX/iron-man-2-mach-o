@@ -21,7 +21,9 @@ for base,size in ((STACK,0x10000),(HEAP,0x100000),(OBJECT,0x10000),(STOP,0x1000)
 u.reg_write(UC_ARM_REG_C1_C0_2,0x00f00000);u.reg_write(UC_ARM_REG_FPEXC,0x40000000)
 next_alloc=HEAP;live={};calls=0
 
-gles_capture={};gles_seen=[]
+gles_capture={};gles_seen=[];once_seen=set()
+ONCE_RETURN=STOP+0x200
+u.mem_write(ONCE_RETURN,struct.pack("<3I",0xe49de008,0xe3a00000,0xe12fff1e))
 
 def allocate(n):
  global next_alloc
@@ -62,7 +64,17 @@ def hook(uc,addr,size,_):
   ptr=arg(int(matches('_free_r')))
   if ptr:assert ptr in live;del live[ptr]
   returned()
- elif matches('pthread_mutex_lock','pthread_mutex_unlock'):
+ elif matches('pthread_once'):
+  control=arg(0);callback=arg(1)
+  if control in once_seen:returned(0)
+  else:
+   once_seen.add(control)
+   sp=uc.reg_read(UC_ARM_REG_SP)-8
+   uc.mem_write(sp,struct.pack('<II',uc.reg_read(UC_ARM_REG_LR),0))
+   uc.reg_write(UC_ARM_REG_SP,sp);uc.reg_write(UC_ARM_REG_LR,ONCE_RETURN);uc.reg_write(UC_ARM_REG_PC,callback)
+ elif matches('pthread_mutex_lock','pthread_mutex_unlock','pthread_mutex_init','pthread_mutex_destroy',
+              'pthread_mutexattr_init','pthread_mutexattr_settype','pthread_mutexattr_destroy'):
+
   returned(0) # Single-thread fixture: no OS mutex/scheduling coverage.
  elif addr in {symbols[n]&~1 for n in ('memcpy','memmove','memset')} :
   dst=uc.reg_read(UC_ARM_REG_R0);src=uc.reg_read(UC_ARM_REG_R1);n=uc.reg_read(UC_ARM_REG_R2)
@@ -689,3 +701,64 @@ for align in (0,4):
   actual=struct.unpack('<d',struct.pack('<II',lo,u.reg_read(UC_ARM_REG_R1)))[0]
   assert actual==float(n),(n,actual)
 print(f'PASS: {calls-text_start} real ARM SDK text/helper calls, truncation guards, case/count semantics, 32-bit wide Unicode copy/length, C-locale ASCII conversion, signed32 atol and unsigned64 SoftFP double returns. Non-C locales and Darwin errno mapping remain unverified.')
+
+stream_count=struct.unpack('<I',read(symbols['legacy_stream_imports_count'],4))[0]
+assert stream_count==8
+for i in range(stream_count):
+ name,t,k=struct.unpack('<III',read(symbols['legacy_stream_imports']+12*i,12));entries[cstring(name)]=(t,k)
+stream_start=calls
+O=OBJECT+0xf000;RESULT=O+256;INIT=O+272
+CTOR='ZNSt19basic_ostringstreamIcSt11char_traitsIcESaIcEEC1ESt13_Ios_Openmode'
+DTOR='ZNSt19basic_ostringstreamIcSt11char_traitsIcESaIcEED1Ev'
+GET='ZNKSt15basic_stringbufIcSt11char_traitsIcESaIcEE3strEv'
+WIDEN='ZNKSt9basic_iosIcSt11char_traitsIcEE5widenEc'
+INITCTOR='ZNSt8ios_base4InitC1Ev';INITDTOR='ZNSt8ios_base4InitD1Ev'
+put(INIT-4,GUARD,0xa5a5a5a5,GUARD)
+assert call(INITCTOR,[INIT])==INIT
+assert pointer(INIT-4)==GUARD and pointer(INIT+4)==GUARD
+init_padding=bytes(u.mem_read(INIT+1,3));stream_heap=None
+for align in (0,4):
+ for n in (0,12345,-12345,2147483647,-2147483648):
+  put(O-4,GUARD);put(O+180,GUARD)
+  assert call(CTOR,[O,0x10],align)==O
+  # Original inline ABI: stringbuf at object+4; virtual basic_ios offset from
+  # the complete object's native vtable must locate the 136-byte tail at +44.
+  vtable=pointer(O);offset=struct.unpack('<i',u.mem_read(vtable-12,4))[0]
+  assert offset==44
+  assert call(WIDEN,[O+offset,ord('0')],align)&255==ord('0')
+  assert call('ZNSolsEi',[O,n&0xffffffff],align)==O
+  assert call(GET,[RESULT,O+4],align)==RESULT
+  p=pointer(RESULT);length=pointer(p-12)
+  assert bytes(u.mem_read(p,length))==str(n).encode()
+  call('ZNSsD2Ev',[RESULT],align);call(DTOR,[O],align)
+  assert pointer(O-4)==GUARD and pointer(O+180)==GUARD
+  if stream_heap is None:stream_heap=dict(live)
+  else:assert live==stream_heap
+ for n in (-123,2147483647,-2147483648):
+  call(CTOR,[O,0x10],align);assert call('ZNSo9_M_insertIlEERSoT_',[O,n&0xffffffff],align)==O
+  call(GET,[RESULT,O+4],align);p=pointer(RESULT)
+  assert bytes(u.mem_read(p,pointer(p-12)))==str(n).encode()
+  call('ZNSsD2Ev',[RESULT],align);call(DTOR,[O],align)
+  assert live==stream_heap
+ # Replay original inline ios_base::width and basic_ios fill/fill_init stores.
+ call(CTOR,[O,0x10],align)
+ offset=struct.unpack('<i',u.mem_read(pointer(O)-12,4))[0]
+ put(O+offset+8,8)
+ u.mem_write(O+offset+0x74,b'0\x01')
+ call('ZNSolsEi',[O,123],align);call(GET,[RESULT,O+4],align)
+ p=pointer(RESULT);assert bytes(u.mem_read(p,pointer(p-12)))==b'00000123'
+ assert pointer(O+offset+8)==0
+ call('ZNSsD2Ev',[RESULT],align);call(DTOR,[O],align)
+ assert live==stream_heap and pointer(O+180)==GUARD
+ # A 32-bit long and the old ios_base flag word must preserve unsigned-looking
+ # hexadecimal formatting of a negative signed32 value.
+ call(CTOR,[O,0x10],align)
+ offset=struct.unpack('<i',u.mem_read(pointer(O)-12,4))[0]
+ put(O+offset+12,(pointer(O+offset+12)&~0x4a)|8)
+ call('ZNSo9_M_insertIlEERSoT_',[O,0xffffffff],align);call(GET,[RESULT,O+4],align)
+ p=pointer(RESULT);assert bytes(u.mem_read(p,pointer(p-12)))==b'ffffffff'
+ call('ZNSsD2Ev',[RESULT],align);call(DTOR,[O],align);assert live==stream_heap
+call(INITDTOR,[INIT])
+assert bytes(u.mem_read(INIT+1,3))==init_padding
+assert pointer(INIT-4)==GUARD and pointer(INIT+4)==GUARD
+print(f'PASS: {calls-stream_start} production ARM legacy stream calls, 180-byte complete object/40-byte stringbuf/+44 virtual-ios layout, signed int/long formatting, hidden COW result, widen and Init lifecycle. OS/thread/stdio services remain fixture scoped.')
