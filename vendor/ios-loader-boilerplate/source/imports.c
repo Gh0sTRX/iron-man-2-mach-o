@@ -11,6 +11,7 @@ static const struct {
     const import_entry *table;
     const int *count;
 } tables[] = {
+    {math_bridge_imports, &math_bridge_imports_count},
     {legacy_string_imports, &legacy_string_imports_count},
     {patch_imports, &patch_imports_count},
     {darwin_imports, &darwin_imports_count},

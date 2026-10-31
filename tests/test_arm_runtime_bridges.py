@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Execute production string bridges AND linked SDK COW code in ARM Unicorn.
-Operator new/delete and Vita Clib memory imports use bounded host fixtures; no Vita/game proof.
+"""Execute production C++/math bridges and linked SDK runtime in ARM Unicorn.
+Heap, Vita Clib memory primitives and single-thread errno/reent storage use
+bounded fixtures; OS TLS is not exercised. No Vita/game execution proof.
 """
-import argparse, struct, runpy
+import argparse, struct, runpy, math
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE, UC_HOOK_MEM_INVALID
 from unicorn.arm_const import *
 # Reuse the actual ELF/import-table inspection, including its argument parser.
@@ -35,6 +36,12 @@ def hook(uc,addr,size,_):
   value=bytes([src&255])*n if addr==(symbols['memset']&~1) else bytes(uc.mem_read(src,n))
   if n:uc.mem_write(dst,value)
   uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+ elif addr==(symbols['__getreent']&~1):
+  uc.reg_write(UC_ARM_REG_R0,struct.unpack('<I',uc.mem_read(symbols['_impure_ptr'],4))[0])
+  uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+ elif addr==(symbols['__errno']&~1):
+  uc.reg_write(UC_ARM_REG_R0,OBJECT+0x2000)
+  uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
  elif addr==(symbols['fatal_error']&~1):raise AssertionError('ARM bridge rejected operation')
 u.hook_add(UC_HOOK_CODE,hook)
 def invalid(uc,access,addr,size,value,_):
@@ -46,11 +53,11 @@ for i in range(struct.unpack('<I',read(symbols['legacy_string_imports_count'],4)
 
 def call(name,args,misalign=0):
  global calls
- target,kind=entries['__'+name];assert kind==0
+ target,kind=entries[name if name.startswith('_') else '__'+name];assert kind==0
  sp=STACK+0x8000+misalign
  u.reg_write(UC_ARM_REG_SP,sp);u.reg_write(UC_ARM_REG_LR,STOP);u.reg_write(UC_ARM_REG_R12,target)
  u.reg_write(UC_ARM_REG_R9,0x12345678)
- for reg,v in zip((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3),args[:4]):u.reg_write(reg,v)
+ for reg,v in zip((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3),(args+[0]*4)[:4]):u.reg_write(reg,v)
  words=args[4:]+[0]*16;u.mem_write(sp,struct.pack('<'+'I'*len(words),*words))
  try: u.emu_start(symbols['ml_align_call'],STOP,count=500000)
  except Exception as ex: raise AssertionError(f'{name}: PC={u.reg_read(UC_ARM_REG_PC):x} LR={u.reg_read(UC_ARM_REG_LR):x}') from ex
@@ -84,3 +91,48 @@ for align in (0,4):
  empty,kind=entries['__ZNSs4_Rep20_S_empty_rep_storageE'];assert kind==1 and pointer(C)==empty+12
  call('ZNSsD2Ev',[C],align);assert not live,live
 print(f'PASS: {calls} actual ARM string bridge calls at both stack alignments; SDK COW header12, hidden result, five-argument insert, mutation and data symbol. Heap and Vita Clib memory primitives are synthetic; no device/game execution.')
+
+# Test actual linked SoftFP libm bridges, not host math implementations.
+math_count=struct.unpack('<I',read(symbols['math_bridge_imports_count'],4))[0]
+assert math_count==23
+for i in range(math_count):
+ n,t,k=struct.unpack('<III',read(symbols['math_bridge_imports']+12*i,12));entries[cstring(n)]=(t,k)
+math_start=calls
+
+def words(x):return list(struct.unpack('<II',struct.pack('<d',x)))
+def float_word(x):return struct.unpack('<I',struct.pack('<f',x))[0]
+def calculate(name,args,single=False,align=0):
+ # Garbage VFP input proves base AAPCS register/stack argument routing.
+ for reg in (UC_ARM_REG_S0,UC_ARM_REG_S1,UC_ARM_REG_S2,UC_ARM_REG_S3):u.reg_write(reg,0x7fc00000)
+ low=call('_'+name,args,align)
+ if single:return struct.unpack('<f',struct.pack('<I',low))[0]
+ return struct.unpack('<d',struct.pack('<II',low,u.reg_read(UC_ARM_REG_R1)))[0]
+def near(result,expected,single=False):
+ assert math.isclose(result,expected,rel_tol=2e-6 if single else 2e-12,abs_tol=1e-7 if single else 1e-14),(result,expected)
+for align in (0,4):
+ for name,x,expected in [('acos',0.,math.pi/2),('asin',.5,math.pi/6),('atan',1.,math.pi/4),
+                         ('ceil',-1.25,-1.),('exp',1.,math.e),('log',math.e,1.),
+                         ('log2',8.,3.),('tan',math.pi/4,1.)]:
+  near(calculate(name,words(x),align=align),expected)
+ for name,x,expected in [('asinf',.5,math.pi/6),('atanf',1.,math.pi/4),('ceilf',-1.25,-1.),
+                         ('coshf',0.,1.),('roundf',2.5,3.),('roundf',-2.5,-3.),
+                         ('sinhf',0.,0.),('tanhf',0.,0.)]:
+  near(calculate(name,[float_word(x)],True,align),expected,True)
+ near(calculate('atan2f',[float_word(1.),float_word(-1.)],True,align),3*math.pi/4,True)
+ near(calculate('fmodf',[float_word(-5.5),float_word(2.)],True,align),-1.5,True)
+ near(calculate('fmax',words(-4.)+words(2.),align=align),2.)
+ near(calculate('fmin',words(-4.)+words(2.),align=align),-4.)
+ near(calculate('fmax',words(math.nan)+words(2.),align=align),2.)
+ near(calculate('fmin',words(2.)+words(math.nan),align=align),2.)
+ assert math.isnan(calculate('acos',words(2.),align=align))
+ assert struct.unpack('<i',u.mem_read(OBJECT+0x2000,4))[0]==33
+ near(calculate('frexp',words(12.)+[OBJECT+64],align=align),.75)
+ assert struct.unpack('<i',u.mem_read(OBJECT+64,4))[0]==4
+ near(calculate('modf',words(-3.25)+[OBJECT+72],align=align),-.25)
+ assert struct.unpack('<d',u.mem_read(OBJECT+72,8))[0]==-3.
+ u.mem_write(TEXT,b' -12.5tail\0')
+ near(calculate('strtod',[TEXT,OBJECT+64],align=align),-12.5)
+ assert pointer(OBJECT+64)==TEXT+6
+ near(calculate('atof',[TEXT],align=align),-12.5)
+ assert math.copysign(1.,calculate('roundf',[0x80000000],True,align))==-1.
+print(f'PASS: {calls-math_start} production ARM math calls, both stack alignments, poisoned VFP args, r0/r1 double returns, out-pointers, NaN, signed zero, rounding and strtod end-pointer.')

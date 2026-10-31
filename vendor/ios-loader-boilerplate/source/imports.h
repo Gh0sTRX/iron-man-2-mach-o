@@ -23,6 +23,9 @@ typedef struct {
  */
 const import_entry *imports_lookup(const char *name);
 
+extern const import_entry math_bridge_imports[];
+extern const int math_bridge_imports_count;
+
 extern const import_entry legacy_string_imports[];
 extern const int legacy_string_imports_count;
 

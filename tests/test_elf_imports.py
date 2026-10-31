@@ -99,3 +99,10 @@ assert legacy[empty]==(symbols['_ZNSs4_Rep20_S_empty_rep_storageE'],1)
 assert all(target and kind==0 for name,(target,kind) in legacy.items() if name!=empty)
 assert '__ZNKSs6substrEmm' in legacy and '__ZNSs6insertEmRKSsmm' in legacy
 print('PASS: 23 ARM C++ function bindings and actual SDK empty-rep DATA symbol')
+
+math_count=struct.unpack('<I',read(symbols['math_bridge_imports_count'],4))[0]
+assert math_count==23
+for i in range(math_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['math_bridge_imports']+12*i,12))
+    assert kind==0 and target==symbols['b_'+cstring(name)[1:]], cstring(name)
+print('PASS: 23 ARM math imports route to explicit base-AAPCS bridges')
