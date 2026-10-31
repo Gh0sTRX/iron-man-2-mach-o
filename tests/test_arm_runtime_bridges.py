@@ -489,3 +489,162 @@ for align in (0,4):
  assert len(array_draws)==before
  call('_glVertexPointer',[2,0x140c,10,V],align)
 print(f'PASS: {calls-array_start} production ARM client-array calls, fixed color/normal/two-texture data, byte strides, u8/unaligned-u16 indexed draws, original pointer/query state, restoration and error guards; VitaGL draw boundary captured, no GPU image.')
+
+# OES init -> game state -> actual gles_present -> restored game state.
+# SDK/OS/GPU entrypoints are a deterministic state model, not a renderer.
+import copy
+for table in ('gles_imports',):
+ n=struct.unpack('<I',read(symbols[table+'_count'],4))[0]
+ for i in range(n):
+  name,t,k=struct.unpack('<III',read(symbols[table]+12*i,12));entries[cstring(name)]=(t,k)
+for name in ('gles_init','gles_eagl_present'):
+ entries['__'+name]=(symbols[name],0)
+model_names=('l_info','l_error','glActiveTexture','glTexEnvi','glTexEnvfv','glGetIntegerv','glGetFloatv','glGetBooleanv','glIsEnabled',
+ 'glGetError','glEnable','glDisable','glBindTexture','glColorMask','glClearColor','glColor4f','glColor4x',
+ 'glMatrixMode','glPushMatrix','glPopMatrix','glLoadIdentity','glOrthof','glViewport','glClear',
+ 'glBindFramebuffer','glGenFramebuffers','glGenTextures','glTexImage2D','glTexParameteri',
+ 'glFramebufferTexture2D','glCheckFramebufferStatus','vglUseTripleBuffering','vglInitExtended','vglSwapBuffers',
+ 'glGetString','glHint','glReadPixels','glCompressedTexImage2D')
+model_native={symbols[name]&~1:name for name in model_names}
+for address in model_native:gles_capture.pop(address,None)
+state={'active':0,'caps':set(),'texture_on':[False,False],'binding':[0,0],'env':[0x2100,0x2100],
+ 'env_color':[(0.,0.,0.,0.),(0.,0.,0.,0.)],'scale':[(1.,1.),(1.,1.)],
+ 'mask':(1,1,1,1),'clear':(0.,0.,0.,0.),'color':(1.,1.,1.,1.),'matrix_mode':0x1700,
+ 'viewport':(0,0,960,544),'fbo':0,'matrices':{},'stacks':{},'error':0}
+identity=tuple(1. if i%5==0 else 0. for i in range(16))
+for key in ((0x1700,0),(0x1701,0),(0x1702,0),(0x1702,1)):state['matrices'][key]=identity;state['stacks'][key]=[]
+resource_next=1000;swaps=[];transfers=[];hints=[]
+STRING=OBJECT+0xd000;u.mem_write(STRING,b'Backend fixture string\0')
+
+def model_hook(uc,address,size,_):
+ global resource_next
+ if address not in model_native:return
+ name=model_native[address]
+ registers=[uc.reg_read(r) for r in (UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3)]
+ stack=struct.unpack('<4I',uc.mem_read(uc.reg_read(UC_ARM_REG_SP),16));args=registers+list(stack)
+ fl=lambda i:struct.unpack('<f',struct.pack('<I',uc.reg_read(UC_ARM_REG_S0+i)))[0]
+ out=0;active=state['active'];key=(state['matrix_mode'],active if state['matrix_mode']==0x1702 else 0)
+ if name=='l_info':pass
+ elif name=='l_error':raise AssertionError('Production GLES init logged an error')
+ elif name=='glActiveTexture':state['active']=args[0]-0x84c0;assert state['active'] in (0,1)
+ elif name in ('glEnable','glDisable'):
+  if args[0]==0xde1:state['texture_on'][active]=name=='glEnable'
+  elif name=='glEnable':state['caps'].add(args[0])
+  else:state['caps'].discard(args[0])
+ elif name=='glIsEnabled':out=int(state['texture_on'][active] if args[0]==0xde1 else args[0] in state['caps'])
+ elif name=='glBindTexture':assert args[0]==0xde1;state['binding'][active]=args[1]
+ elif name=='glTexEnvi':
+  assert args[0]==0x2300
+  if args[1]==0x2200:state['env'][active]=args[2]
+  elif args[1] in (0x8573,0xd1c):
+   value=list(state['scale'][active]);value[int(args[1]==0xd1c)]=float(args[2]);state['scale'][active]=tuple(value)
+  else:state['error']=0x500
+ elif name=='glTexEnvfv':
+  assert args[0]==0x2300
+  if args[1]==0x2201:state['env_color'][active]=struct.unpack('<4f',uc.mem_read(args[2],16))
+  else:
+   assert args[1] in (0x8573,0xd1c)
+   value=list(state['scale'][active]);value[int(args[1]==0xd1c)]=struct.unpack('<f',uc.mem_read(args[2],4))[0];state['scale'][active]=tuple(value)
+ elif name in ('glGetIntegerv','glGetFloatv','glGetBooleanv'):
+  p=args[0]
+  values={0x84e0:(0x84c0+active,),0x8069:(state['binding'][active],),0xba0:(state['matrix_mode'],),0xba2:state['viewport'],
+          0xc22:state['clear'],0xc23:state['mask'],0xb00:state['color'],0x8ca7:(0,)}.get(p)
+  assert values is not None,hex(p)
+  fmt='f' if name=='glGetFloatv' else 'B' if name=='glGetBooleanv' else 'I'
+  values=[float(v) if fmt=='f' else int(bool(v)) if fmt=='B' else int(v) for v in values]
+  uc.mem_write(args[1],struct.pack('<'+fmt*len(values),*values))
+ elif name=='glGetError':out=state['error'];state['error']=0
+ elif name=='glColorMask':state['mask']=tuple(v&255 for v in args[:4])
+ elif name=='glClearColor':state['clear']=tuple(fl(i) for i in range(4))
+ elif name=='glColor4f':state['color']=tuple(fl(i) for i in range(4))
+ elif name=='glColor4x':state['color']=tuple(max(0.,min(1.,struct.unpack('<i',struct.pack('<I',v))[0]/65536.)) for v in args[:4])
+ elif name=='glMatrixMode':state['matrix_mode']=args[0]
+ elif name=='glPushMatrix':state['stacks'][key].append(state['matrices'][key])
+ elif name=='glPopMatrix':state['matrices'][key]=state['stacks'][key].pop()
+ elif name=='glLoadIdentity':state['matrices'][key]=identity
+ elif name=='glOrthof':state['matrices'][key]=tuple(fl(i) for i in range(6))
+ elif name=='glViewport':state['viewport']=tuple(args[:4])
+ elif name=='glBindFramebuffer':assert args[0]==0x8d40;state['fbo']=args[1]
+ elif name in ('glGenFramebuffers','glGenTextures'):
+  for i in range(args[0]):put(args[1]+4*i,resource_next);resource_next+=1
+ elif name=='glCheckFramebufferStatus':out=0x8cd5
+ elif name=='vglInitExtended':out=1
+ elif name=='vglSwapBuffers':swaps.append((copy.deepcopy(state),copy.deepcopy(array_state),set(array_enabled),array_unit))
+ elif name=='glGetString':out=STRING
+ elif name=='glHint':hints.append(tuple(args[:2]))
+ elif name=='glReadPixels':transfers.append((name,tuple(args[:7])));uc.mem_write(args[6],b'\x12\x34\x56\x78')
+ elif name=='glCompressedTexImage2D':transfers.append((name,tuple(args[:8]),bytes(uc.mem_read(args[7],args[6]))))
+ else:assert name in ('glClear','glTexImage2D','glTexParameteri','glFramebufferTexture2D','vglUseTripleBuffering')
+ uc.reg_write(UC_ARM_REG_R0,out);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+u.hook_add(UC_HOOK_CODE,model_hook)
+present_start=calls
+call('gles_init',[])
+FB=OBJECT+0xa000;RB=FB+4;OUT=RB+32;DATA=OUT+128
+call('_glGenFramebuffersOES',[1,FB]);call('_glGenRenderbuffersOES',[1,RB]);fb=pointer(FB);rb=pointer(RB)
+call('_glBindFramebufferOES',[0x8d40,fb]);call('_glBindRenderbufferOES',[0x8d41,rb])
+call('_glRenderbufferStorageOES',[0x8d41,0x8058,320,480])
+call('_glFramebufferRenderbufferOES',[0x8d40,0x8ce0,0x8d41,rb])
+assert call('_glCheckFramebufferStatusOES',[0x8d40])==0x8cd5
+assert call('_glGetError',[])==0
+for align in (0,4):
+ # All enum/floating/fixed routes, including vector enums unsupported by a
+ # direct SDK glTexEnvfv call, must update the intended unit only.
+ call('_glActiveTexture',[0x84c0],align)
+ call('_glTexEnvf',[0x2300,0x2200,float_word(0x2101)],align)
+ assert state['env'][0]==0x2101
+ call('_glTexEnvf',[0x2300,0x8573,float_word(2.)],align)
+ call('_glTexEnvx',[0x2300,0xd1c,4*65536],align);assert state['scale'][0]==(2.,4.)
+ put(DATA,float_word(-1.),float_word(.25),float_word(2.),float_word(1.))
+ call('_glTexEnvfv',[0x2300,0x2201,DATA],align);assert state['env_color'][0]==(0.,.25,1.,1.)
+ put(DATA,0xffff0000,32768,2*65536,65536)
+ call('_glTexEnvxv',[0x2300,0x2201,DATA],align);assert state['env_color'][0]==(0.,.5,1.,1.)
+ put(DATA,float_word(0x2101));call('_glTexEnvfv',[0x2300,0x2200,DATA],align);assert state['env'][0]==0x2101
+ call('_glActiveTexture',[0x84c1],align);call('_glTexEnvx',[0x2300,0x2200,0x1e01],align)
+ assert state['env']==[0x2101,0x1e01]
+ for name,args,error in (
+  ('_glActiveTexture',[0x84c2],0x500),('_glTexEnvf',[0x2300,0x2200,float_word(math.nan)],0x500),
+  ('_glTexEnvf',[0x2300,0x8573,float_word(2.5)],0x501),('_glTexEnvx',[0x2300,0xd1c,2],0x501),
+  ('_glTexEnvfv',[0x2300,0x2200,0],0x501),('_glTexEnvxv',[0x2300,0x2201,0],0x501),
+  ('_glTexEnvi',[0x2300,0x2200,0xdead],0x500),('_glTexEnvf',[0,0x2200,float_word(0x2100)],0x500)):
+  call(name,args,align);assert call('_glGetError',[],align)==error
+ assert state['active']==1 and state['env']==[0x2101,0x1e01]
+ # Cached client/FBO queries must not leak temporary native float pointer types
+ # or actual GPU IDs, and booleans must write exactly one byte.
+ put(OUT,0xa5a5a5a5);call('_glGetBooleanv',[0x8074,OUT],align);assert get(OUT,1)==(0xa5a5a501,)
+ call('_glGetIntegerv',[0x84e2,OUT],align);assert pointer(OUT)==2
+ call('_glGetFloatv',[0x807b,OUT],align);assert struct.unpack('<f',u.mem_read(OUT,4))[0]==float(0x140c)
+ call('_glGetFloatv',[0x8ca6,OUT],align);assert struct.unpack('<f',u.mem_read(OUT,4))[0]==float(fb)
+ for name in ('_glGetFloatv','_glGetBooleanv'):
+  call(name,[0x8074,0],align);assert call('_glGetError',[],align)==0x501
+ assert call('_glGetString',[0x1f03],align)==STRING
+ call('_glHint',[0xc54,0x1102],align);assert hints[-1]==(0xc54,0x1102)
+ put(OUT,0,0xa5a5a5a5)
+ call('_glReadPixels',[3,4,1,1,0x1908,0x1401,OUT],align)
+ assert transfers[-1][1]==(3,4,1,1,0x1908,0x1401,OUT) and bytes(u.mem_read(OUT,8))==b'\x12\x34\x56\x78\xa5\xa5\xa5\xa5'
+ u.mem_write(DATA,bytes(range(32)))
+ call('_glCompressedTexImage2D',[0xde1,0,0x8c02,8,8,0,32,DATA],align)
+ assert transfers[-1][1]==(0xde1,0,0x8c02,8,8,0,32,DATA) and transfers[-1][2]==bytes(range(32))
+ # A non-default game state including both textures, fog/lighting, masks and
+ # texture matrices must survive the actual presentation function unchanged.
+ for cap in (0xbe2,0xbc0,0xc11,0xb71,0xb60,0xb50,0xb44,0xb90):call('_glEnable',[cap],align)
+ for unit,texture in ((0x84c0,77),(0x84c1,88)):
+  call('_glActiveTexture',[unit],align);call('_glBindTexture',[0xde1,texture],align);call('_glEnable',[0xde1],align)
+ call('_glColorMask',[1,0,1,0],align);call('_glClearColor',[float_word(v) for v in (.125,.25,.375,.5)],align)
+ call('_glColor4x',[16384,32768,49152,65536],align);call('_glViewport',[10,20,300,400],align)
+ for k in state['matrices']:state['matrices'][k]=tuple(float(i+10+k[1]) for i in range(16))
+ call('_glMatrixMode',[0x1702],align)
+ call('_glDrawArrays',[4,0,3],align)
+ before=copy.deepcopy(state);before_arrays=copy.deepcopy(array_state);before_enabled=set(array_enabled);before_unit=array_unit
+ assert call('gles_eagl_present',[0x8d41],align)==1
+ assert state==before,(state,before)
+ assert array_state==before_arrays and array_enabled==before_enabled and array_unit==before_unit
+ picture,ap,enabled,client=swaps[-1]
+ assert picture['fbo']==0 and picture['viewport']==(0,0,960,544) and not picture['caps']
+ assert picture['texture_on']==[True,False] and picture['mask']==(1,1,1,1) and picture['clear']==(0.,0.,0.,1.)
+ assert picture['env'][0]==0x1e01 and picture['matrices'][(0x1702,0)]==identity
+ assert enabled=={0,3} and client==0
+ assert array_draws[-1][0]=='glDrawArrays' and array_draws[-1][2]==[0,1,2,3]
+ assert array_draws[-1][3][0]==[(72.,0.),(888.,0.),(72.,544.),(888.,544.)]
+ assert array_draws[-1][3][3]==[(1.,1.),(1.,0.),(0.,1.),(0.,0.)]
+ assert call('_glGetError',[],align)==0
+print(f'PASS: {calls-present_start} production texture/query/transfer/present calls; actual OES resource path and state save/restore with two units, fog/light/masks/matrices and 960x544 quad. SDK/GPU entrypoints modeled; no real pixels or owner game execution.')

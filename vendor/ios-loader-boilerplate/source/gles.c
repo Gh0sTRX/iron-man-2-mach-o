@@ -11,6 +11,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <vitaGL.h>
 
 #include "gles.h"
@@ -43,7 +44,8 @@ void gles_record_error(uint32_t e){if(e && !oes_error)oes_error=e;}
 static GLenum g_glGetError(void){GLenum e=oes_error;if(e){oes_error=0;return e;}return glGetError();}
 
 static Im2Arrays *arrays;
-static GLint env_mode = GL_MODULATE;
+static GLint env_mode[2] = {GL_MODULATE,GL_MODULATE};
+static unsigned server_unit;
 static GLfixed color[4] = {0x10000,0x10000,0x10000,0x10000};
 static uint32_t gles_draw_calls;
 uint32_t gles_get_draw_calls(void){return gles_draw_calls;}
@@ -62,7 +64,7 @@ static void array_unit(void *ctx,uint32_t unit){(void)ctx;glClientActiveTexture(
 static void array_draw(void *ctx,uint32_t mode,int first,int count){(void)ctx;gles_draw_calls++;glDrawArrays(mode,first,count);}
 static void array_elements(void *ctx,uint32_t mode,int count,uint32_t type,const void *p){(void)ctx;gles_draw_calls++;glDrawElements(mode,count,type,p);}
 int gles_client_arrays_init(void){
-    if(arrays)return -1;
+    if(arrays)return 0;
     arrays=im2_arrays_create((Im2ArrayBackend){NULL,array_pointer,array_enable,array_unit,array_draw,array_elements});
     return arrays?0:-1;
 }
@@ -85,16 +87,52 @@ static void g_glColor4x(GLfixed r, GLfixed g, GLfixed b, GLfixed a) {
     glColor4x(r, g, b, a);
 }
 
-static void g_glTexEnvi(GLenum target, GLenum pname, GLint v) {
-    if (pname == GL_TEXTURE_ENV_MODE)
-        env_mode = v;
-    glTexEnvi(target, pname, v);
+static void g_glActiveTexture(GLenum unit){
+    if(unit<GL_TEXTURE0 || unit>GL_TEXTURE1){gles_record_error(GL_INVALID_ENUM);return;}
+    server_unit=unit-GL_TEXTURE0;glActiveTexture(unit);
 }
-
-static void g_glTexEnvxv(GLenum target, GLenum pname, const GLfixed *v) {
-    if (pname == GL_TEXTURE_ENV_MODE) // enum value, not fixed point
-        return g_glTexEnvi(target, pname, v[0]);
-    glTexEnvxv(target, pname, (GLfixed *)v);
+static int tex_target(GLenum target){if(target==GL_TEXTURE_ENV)return 1;gles_record_error(GL_INVALID_ENUM);return 0;}
+static int tex_scale(GLenum pname){return pname==GL_RGB_SCALE || pname==GL_ALPHA_SCALE;}
+static void g_glTexEnvi(GLenum target,GLenum pname,GLint value){
+    if(!tex_target(target))return;
+    if(pname==GL_TEXTURE_ENV_COLOR){gles_record_error(GL_INVALID_ENUM);return;}
+    if(tex_scale(pname) && value!=1 && value!=2 && value!=4){gles_record_error(GL_INVALID_VALUE);return;}
+    if(pname==GL_TEXTURE_ENV_MODE){
+        if(value!=GL_MODULATE && value!=GL_REPLACE && value!=GL_DECAL && value!=GL_BLEND && value!=GL_ADD && value!=GL_COMBINE){gles_record_error(GL_INVALID_ENUM);return;}
+        env_mode[server_unit]=value;
+    }
+    glTexEnvi(target,pname,value);
+}
+static void tex_float(GLenum target,GLenum pname,GLfloat value){
+    if(!tex_target(target))return;
+    if(pname==GL_TEXTURE_ENV_COLOR){gles_record_error(GL_INVALID_ENUM);return;}
+    if(tex_scale(pname)){
+        if(value!=1.f && value!=2.f && value!=4.f){gles_record_error(GL_INVALID_VALUE);return;}
+        glTexEnvfv(target,pname,&value);return;
+    }
+    if(!isfinite(value) || value< -2147483648.f || value>=2147483648.f || (float)(GLint)value!=value){gles_record_error(GL_INVALID_ENUM);return;}
+    g_glTexEnvi(target,pname,(GLint)value);
+}
+SOFTFP static void g_glTexEnvf(GLenum target,GLenum pname,GLfloat value){tex_float(target,pname,value);}
+static void g_glTexEnvx(GLenum target,GLenum pname,GLfixed value){
+    if(tex_scale(pname))tex_float(target,pname,(float)value*(1.f/65536.f));
+    else g_glTexEnvi(target,pname,value);
+}
+static void g_glTexEnvfv(GLenum target,GLenum pname,const GLfloat *values){
+    if(!tex_target(target))return;
+    if(!values){gles_record_error(GL_INVALID_VALUE);return;}
+    if(pname==GL_TEXTURE_ENV_COLOR){
+        GLfloat v[4];for(int i=0;i<4;i++)v[i]=values[i]<0.f?0.f:values[i]>1.f?1.f:values[i];
+        glTexEnvfv(target,pname,v);
+    }else tex_float(target,pname,values[0]);
+}
+static void g_glTexEnvxv(GLenum target,GLenum pname,const GLfixed *values){
+    if(!tex_target(target))return;
+    if(!values){gles_record_error(GL_INVALID_VALUE);return;}
+    if(pname==GL_TEXTURE_ENV_COLOR){
+        GLfloat v[4];for(int i=0;i<4;i++)v[i]=(float)values[i]*(1.f/65536.f);
+        g_glTexEnvfv(target,pname,v);
+    }else g_glTexEnvx(target,pname,values[0]);
 }
 
 // Texture parameters used by the engine are enums (filters, wrap modes): pass unscaled.
@@ -158,11 +196,24 @@ static void g_glRenderbufferStorageOES(GLenum target,GLenum format,GLsizei w,GLs
 static void g_glFramebufferRenderbufferOES(GLenum target,GLenum attachment,GLenum rbtarget,GLuint id){gles_record_error(target==IM2_OES_FB && rbtarget==IM2_OES_RB?im2_oes_attach(oes,attachment,id):IM2_OES_ENUM);}
 static GLenum g_glCheckFramebufferStatusOES(GLenum target){if(target!=IM2_OES_FB){gles_record_error(IM2_OES_ENUM);return 0;}return im2_oes_status(oes);}
 static void g_glGetRenderbufferParameterivOES(GLenum target,GLenum pname,GLint *value){gles_record_error(target==IM2_OES_RB?im2_oes_parameter(oes,pname,value):IM2_OES_ENUM);}
+static int virtual_integer(GLenum pname,GLint *value){
+    if(pname==GL_MAX_TEXTURE_UNITS)*value=2; /* The compatibility layer tracks two units. */
+    else if(pname==0x8CA6u)*value=(GLint)im2_oes_binding(oes,IM2_OES_FB);
+    else if(pname==0x8CA7u)*value=(GLint)im2_oes_binding(oes,IM2_OES_RB);
+    else return im2_arrays_parameter(arrays,pname,value);
+    return 1;
+}
 static void g_glGetIntegerv(GLenum pname,GLint *value){
     if(!value){gles_record_error(IM2_OES_VALUE);return;}
-    if(pname==0x8CA6u)*value=(GLint)im2_oes_binding(oes,IM2_OES_FB);
-    else if(pname==0x8CA7u)*value=(GLint)im2_oes_binding(oes,IM2_OES_RB);
-    else if(!im2_arrays_parameter(arrays,pname,value))glGetIntegerv(pname,value);
+    if(!virtual_integer(pname,value))glGetIntegerv(pname,value);
+}
+static void g_glGetFloatv(GLenum pname,GLfloat *value){
+    if(!value){gles_record_error(GL_INVALID_VALUE);return;}
+    GLint v;if(virtual_integer(pname,&v))*value=(GLfloat)v;else glGetFloatv(pname,value);
+}
+static void g_glGetBooleanv(GLenum pname,GLboolean *value){
+    if(!value){gles_record_error(GL_INVALID_VALUE);return;}
+    GLint v;if(virtual_integer(pname,&v))*value=(GLboolean)(v!=0);else glGetBooleanv(pname,value);
 }
 
 // ---------------------------------------------------------------- init / present
@@ -190,13 +241,14 @@ int gles_eagl_present(uint32_t target){
 }
 
 void gles_present(void) {
-    static const GLenum caps[] = {GL_BLEND, GL_ALPHA_TEST, GL_SCISSOR_TEST, GL_DEPTH_TEST, GL_TEXTURE_2D};
-    GLboolean on[5];
+    static const GLenum caps[] = {GL_BLEND,GL_ALPHA_TEST,GL_SCISSOR_TEST,GL_DEPTH_TEST,GL_FOG,GL_LIGHTING,GL_CULL_FACE,GL_STENCIL_TEST};
+    GLboolean on[8],texture_on[2],mask[4];GLfloat clear[4];
     GLint tex, mode, active, vp[4];
-    for (int i = 0; i < 5; i++)
-        on[i] = glIsEnabled(caps[i]);
+    for(int i=0;i<8;i++)on[i]=glIsEnabled(caps[i]);
+    glGetBooleanv(GL_COLOR_WRITEMASK,mask);glGetFloatv(GL_COLOR_CLEAR_VALUE,clear);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
-    glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE1);texture_on[1]=glIsEnabled(GL_TEXTURE_2D);glDisable(GL_TEXTURE_2D);
+    glActiveTexture(GL_TEXTURE0);texture_on[0]=glIsEnabled(GL_TEXTURE_2D);
     glClientActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex);
     glGetIntegerv(GL_MATRIX_MODE, &mode);
@@ -204,8 +256,8 @@ void gles_present(void) {
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, SCR_W, SCR_H);
-    for (int i = 0; i < 4; i++)
-        glDisable(caps[i]);
+    for(int i=0;i<8;i++)glDisable(caps[i]);
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glClearColor(0.f,0.f,0.f,1.f);
     glEnable(GL_TEXTURE_2D);
     glClientActiveTexture(GL_TEXTURE1);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -218,6 +270,7 @@ void gles_present(void) {
 
     glBindTexture(GL_TEXTURE_2D, fbo_tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    glMatrixMode(GL_TEXTURE);glPushMatrix();glLoadIdentity();
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -240,15 +293,18 @@ void gles_present(void) {
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
+    glMatrixMode(GL_TEXTURE);glPopMatrix();
     glMatrixMode(mode);
     im2_oes_bind(oes,IM2_OES_FB,im2_oes_binding(oes,IM2_OES_FB));
     glViewport(vp[0], vp[1], vp[2], vp[3]);
     glBindTexture(GL_TEXTURE_2D, tex);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, env_mode);
-    for (int i = 0; i < 5; i++)
-        on[i] ? glEnable(caps[i]) : glDisable(caps[i]);
+    glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,env_mode[0]);
+    for(int i=0;i<8;i++){if(on[i])glEnable(caps[i]);else glDisable(caps[i]);}
+    if(texture_on[0])glEnable(GL_TEXTURE_2D);else glDisable(GL_TEXTURE_2D);
+    glColorMask(mask[0],mask[1],mask[2],mask[3]);glClearColor(clear[0],clear[1],clear[2],clear[3]);
     glColor4x(color[0],color[1],color[2],color[3]);
     gles_client_arrays_restore();
+    glActiveTexture(GL_TEXTURE1);if(texture_on[1])glEnable(GL_TEXTURE_2D);else glDisable(GL_TEXTURE_2D);
     glActiveTexture(active);
 }
 
@@ -263,12 +319,14 @@ const import_entry gles_imports[] = {
     // Integer/pointer-only GLES1 calls share the ARM register ABI.
     // Floating-point calls require explicit iOS SoftFP bridges; do not map directly.
     D(glColorMask), D(glCullFace), D(glDepthFunc), D(glFrontFace), D(glPixelStorei),
-    D(glActiveTexture), D(glBindTexture), D(glBlendFunc), D(glClear), D(glCopyTexImage2D),
+    F(glActiveTexture,g_glActiveTexture), D(glBindTexture), D(glBlendFunc), D(glClear), D(glCopyTexImage2D),
     D(glCopyTexSubImage2D), D(glDeleteTextures), D(glDepthMask), D(glDisable), F(glDisableClientState,g_glDisableClientState),
     D(glEnable), F(glEnableClientState,g_glEnableClientState), D(glGenTextures), F(glGetIntegerv,g_glGetIntegerv), F(glGetError,g_glGetError), D(glIsEnabled),
     D(glLoadIdentity), D(glLoadMatrixx), D(glMatrixMode), D(glOrthox), D(glPopMatrix), D(glPushMatrix),
     D(glRotatex), D(glScalex), D(glScissor), D(glShadeModel), D(glTexImage2D), D(glTexParameteri),
     D(glTexSubImage2D), D(glTranslatex), D(glViewport),
+    F(glGetFloatv,g_glGetFloatv), F(glGetBooleanv,g_glGetBooleanv), D(glGetString), D(glHint), D(glReadPixels), D(glCompressedTexImage2D),
+    F(glTexEnvf,g_glTexEnvf), F(glTexEnvfv,g_glTexEnvfv), F(glTexEnvx,g_glTexEnvx),
     F(glColor4x, g_glColor4x), F(glTexEnvi, g_glTexEnvi), F(glTexEnvxv, g_glTexEnvxv),
     F(glTexParameterx, g_glTexParameterx), F(glGetFixedv, g_glGetFixedv),
     F(glColorPointer,g_glColorPointer), F(glNormalPointer,g_glNormalPointer), F(glDrawElements,g_glDrawElements),

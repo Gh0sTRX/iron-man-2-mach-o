@@ -174,3 +174,9 @@ for name in ('glColorPointer','glNormalPointer','glDrawElements','glVertexPointe
     assert gles_entries['_'+name]==(symbols['g_'+name],0), name
 assert 'im2_arrays_draw' in symbols and 'im2_arrays_elements' in symbols
 print('PASS: guest client arrays and both draw forms route to checked conversion/state bridges')
+
+for name in ('glActiveTexture','glTexEnvi','glTexEnvf','glTexEnvfv','glTexEnvx','glTexEnvxv','glGetFloatv','glGetBooleanv'):
+    assert gles_entries['_'+name]==(symbols['g_'+name],0),name
+for name in ('glGetString','glHint','glReadPixels','glCompressedTexImage2D'):
+    assert gles_entries['_'+name]==(symbols[name],0),name
+print('PASS: texture/query state bridges and integer/pointer-only upload/readback APIs linked to real backend entries')
