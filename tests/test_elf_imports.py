@@ -180,3 +180,14 @@ for name in ('glActiveTexture','glTexEnvi','glTexEnvf','glTexEnvfv','glTexEnvx',
 for name in ('glGetString','glHint','glReadPixels','glCompressedTexImage2D'):
     assert gles_entries['_'+name]==(symbols[name],0),name
 print('PASS: texture/query state bridges and integer/pointer-only upload/readback APIs linked to real backend entries')
+
+text_count=struct.unpack('<I',read(symbols['libc_text_imports_count'],4))[0]
+assert text_count==10
+text_entries={}
+for i in range(text_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['libc_text_imports']+12*i,12))
+    text_entries[cstring(name)]=(target,kind)
+for name in ('atol','strcasecmp','strncasecmp','strlcpy','strcoll','wcscmp','wcscpy','wcslen','wcstombs'):
+    assert text_entries['_'+name]==(symbols[name],0)
+assert text_entries['___floatundidf']==(symbols['text_u64_double'],0)
+print('PASS: nine native C text functions and explicit unsigned64-to-double base-AAPCS helper linked')

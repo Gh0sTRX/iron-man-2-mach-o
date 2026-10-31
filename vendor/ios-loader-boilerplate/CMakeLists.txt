@@ -31,6 +31,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/legacy_containers.cpp
   source/legacy_string.cpp
   source/imports.c
+  source/libc_text.c
   source/darwin.c
   source/objc.c
   source/foundation.c

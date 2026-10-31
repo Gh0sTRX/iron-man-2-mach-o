@@ -36,6 +36,9 @@ extern const import_entry legacy_string_imports[];
 extern const int legacy_string_imports_count;
 
 // Modular subsystem symbol tables
+extern const import_entry libc_text_imports[];
+extern const int libc_text_imports_count;
+
 extern const import_entry darwin_imports[];
 extern const int darwin_imports_count;
 

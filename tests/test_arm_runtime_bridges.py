@@ -648,3 +648,44 @@ for align in (0,4):
  assert array_draws[-1][3][3]==[(1.,1.),(1.,0.),(0.,1.),(0.,0.)]
  assert call('_glGetError',[],align)==0
 print(f'PASS: {calls-present_start} production texture/query/transfer/present calls; actual OES resource path and state save/restore with two units, fog/light/masks/matrices and 960x544 quad. SDK/GPU entrypoints modeled; no real pixels or owner game execution.')
+
+text_count=struct.unpack('<I',read(symbols['libc_text_imports_count'],4))[0]
+assert text_count==10
+for i in range(text_count):
+ n,t,k=struct.unpack('<III',read(symbols['libc_text_imports']+12*i,12));entries[cstring(n)]=(t,k)
+text_start=calls
+A=OBJECT+0xe000;B=A+256;W=A+512;X=W+128;OUT=X+128
+u.mem_write(A,b'Iron Man 2\0');u.mem_write(B,b'iRON mAN 2\0')
+for align in (0,4):
+ u.mem_write(B,b'iRON mAN 2\0')
+ assert call('_strcasecmp',[A,B],align)==0
+ assert call('_strncasecmp',[A,B,4],align)==0
+ u.mem_write(B,b'iRON Else\0');assert call('_strncasecmp',[A,B,4],align)==0
+ assert call('_strcasecmp',[A,B],align)!=0
+ u.mem_write(B,b'iRON mAN 2\0')
+ for size in (0,1,5,11,16):
+  u.mem_write(OUT,b'\xa5'*24)
+  assert call('_strlcpy',[OUT,A,size],align)==10
+  expected=(b'Iron Man 2'[:size-1]+b'\0') if size else b''
+  assert bytes(u.mem_read(OUT,len(expected)))==expected
+  assert bytes(u.mem_read(OUT+len(expected),24-len(expected)))==b'\xa5'*(24-len(expected))
+ assert call('_strcoll',[A,A],align)==0
+ put(W,ord('I'),ord('r'),ord('o'),ord('n'),0x1f600,0)
+ assert call('_wcslen',[W],align)==5
+ put(X,*([0xa5a5a5a5]*8));assert call('_wcscpy',[X,W],align)==X
+ assert get(X,6)==get(W,6) and get(X+24,2)==(0xa5a5a5a5,0xa5a5a5a5)
+ assert call('_wcscmp',[W,X],align)==0
+ put(X,ord('Z'),0);assert call('_wcscmp',[W,X],align)&0x80000000
+ ascii_wide=[ord(c) for c in 'Iron Man 2']+[0];put(W,*ascii_wide)
+ assert call('_wcstombs',[0,W,0],align)==10
+ u.mem_write(OUT,b'\xa5'*24)
+ assert call('_wcstombs',[OUT,W,5],align)==5 and bytes(u.mem_read(OUT,6))==b'Iron \xa5'
+ assert call('_wcstombs',[OUT,W,20],align)==10 and bytes(u.mem_read(OUT,11))==b'Iron Man 2\0'
+ for n in (0,12345,-12345,2147483647,-2147483648):
+  u.mem_write(B,str(n).encode()+b'\0');assert call('_atol',[B],align)==(n&0xffffffff)
+ for n in (0,1,2**32+1,2**53+1,2**63,2**64-1):
+  u.reg_write(UC_ARM_REG_D0,0x7ff8000000000000)
+  lo=call('___floatundidf',[n&0xffffffff,n>>32],align)
+  actual=struct.unpack('<d',struct.pack('<II',lo,u.reg_read(UC_ARM_REG_R1)))[0]
+  assert actual==float(n),(n,actual)
+print(f'PASS: {calls-text_start} real ARM SDK text/helper calls, truncation guards, case/count semantics, 32-bit wide Unicode copy/length, C-locale ASCII conversion, signed32 atol and unsigned64 SoftFP double returns. Non-C locales and Darwin errno mapping remain unverified.')
