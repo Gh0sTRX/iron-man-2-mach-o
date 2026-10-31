@@ -1,0 +1,21 @@
+{
+  "macho_sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "elf_sha256": "29be3b5d53bed8fa2f44cc407bef20300ab98e03aa1be502fc46d33f49f48ae2",
+  "frameworks_initialized": true,
+  "constructors_returned": 297,
+  "registered_exit_callbacks": 359,
+  "exit_callbacks_entered": 359,
+  "exit_callbacks_drained": true,
+  "main_called": false,
+  "physical_vita_verified": false,
+  "gpu_verified": false,
+  "exception_unwinding_verified": false,
+  "date_istanbul": "2026-11-01",
+  "unbound_fixture_symbols": 152,
+  "previous_fixture_unbound_symbols": 187,
+  "production_missing_names": 152,
+  "production_missing_name_count_changed": false,
+  "os_fixtures": "Turkish language, absent preferences, single-thread kernel mutex/thread identity; no physical OS verification",
+  "diagnostic_only": true,
+  "script_sha256": "58b8e2f83204e6d63999cd6a079467769a4fe499281be664dcb1249ef0564df4"
+}

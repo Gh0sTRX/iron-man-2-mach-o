@@ -49,20 +49,26 @@ def image(symbol, read_token=False):
 
 with tempfile.TemporaryDirectory() as temp:
     root = Path(temp)
-    for symbol, read_token, expected in (
-        ('_malloc', False, None),
-        ('_im2_missing_test_only', False, 'unbound_import_execution'),
-        ('_im2_missing_test_only', True, 'unbound_import_data_access'),
+    for symbol, read_token, expected, frameworks in (
+        ('_malloc', False, None, False),
+        ('_malloc', False, None, True),
+        ('_im2_missing_test_only', False, 'unbound_import_execution', False),
+        ('_im2_missing_test_only', True, 'unbound_import_data_access', False),
     ):
         data, rbs = image(symbol, read_token)
         macho, reloc, output = root/'synthetic', root/'rbs1', root/'report.json'
         macho.write_bytes(data)
         reloc.write_bytes(rbs)
-        result = subprocess.run([sys.executable, 'tools/replay_owner_startup.py',
+        command = [sys.executable, 'tools/replay_owner_startup.py',
              '--elf', str(args.elf), '--macho', str(macho), '--rbs1', str(reloc),
-             '--output', str(output), '--drain-exit-callbacks'], capture_output=True, text=True)
+             '--output', str(output), '--drain-exit-callbacks']
+        if frameworks:
+            command.append('--initialize-frameworks')
+        result = subprocess.run(command, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout+result.stderr
         report = json.loads(output.read_text())
+        assert report['frameworks_initialized'] == frameworks
+        assert report['framework_data_bindings'] == (67 if frameworks else 0)
         assert report['external_relocations_applied'] == 1
         assert report['constructors_available'] == 1
         assert len(report['constructors_entered']) == 1

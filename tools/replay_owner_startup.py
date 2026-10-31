@@ -60,6 +60,8 @@ def main():
     parser.add_argument('--instruction-budget', type=int, default=20_000_000)
     parser.add_argument('--drain-exit-callbacks', action='store_true',
                         help='After successful constructors, run their real registered cleanup callbacks')
+    parser.add_argument('--initialize-frameworks', action='store_true',
+                        help='Reset regression state and run real objc_init with explicit OS fixtures')
     args = parser.parse_args()
     if args.instruction_budget <= 0:
         parser.error('instruction budget must be positive')
@@ -75,6 +77,16 @@ def main():
     # Functions retain the actual runpy module globals, rather than its returned copy.
     g = state['call'].__globals__
     u, symbols = g['u'], g['symbols']
+    framework_bindings = 0
+    if args.initialize_frameworks:
+        # Fresh ELF state: do not register production classes over synthetic roots.
+        for section in g['alloc']:
+            address, offset, size = section[3:6]
+            u.mem_write(address, bytes(size) if section[1] == 8 else g['binary'][offset:offset+size])
+        g['live'].clear()
+        g['once_seen'].clear()
+        g['tls_values'].clear()
+        g['tls_next'] = 1
     ranges = []
     for name, vm, size, fileoff, filesize in segments:
         if name not in ('__TEXT', '__DATA'):
@@ -114,12 +126,56 @@ def main():
             u.reg_write(r, value)
         words = values[4:]+[0]*16
         u.mem_write(sp, struct.pack('<'+'I'*len(words), *words))
-        u.emu_start(symbols[name], g['STOP'], count=args.instruction_budget)
+        try:
+            u.emu_start(symbols[name], g['STOP'], count=args.instruction_budget)
+        except Exception as ex:
+            raise RuntimeError(f'{name}: PC={u.reg_read(UC_ARM_REG_PC):x} LR={u.reg_read(UC_ARM_REG_LR):x}') from ex
         if u.reg_read(UC_ARM_REG_PC) != g['STOP']:
             raise RuntimeError('Instruction budget exhausted or diagnostic trap')
         if u.reg_read(UC_ARM_REG_SP) != sp or u.reg_read(UC_ARM_REG_R9) != 0x12345678:
             raise RuntimeError('Native caller stack/r9 preservation failed')
         return u.reg_read(UC_ARM_REG_R0)
+
+    if args.initialize_frameworks:
+        mutex_addresses = {symbols[name] & ~1 for name in (
+            'sceKernelLockMutex', 'sceKernelUnlockMutex', 'sceKernelDeleteMutex')}
+        identity_addresses = {symbols[name] & ~1 for name in (
+            'sceKernelCreateMutex', 'sceKernelGetThreadId')}
+        def framework_os(uc, address, size, context):
+            if address in mutex_addresses:
+                uc.reg_write(UC_ARM_REG_R0, 0)  # Single-thread fixture, no OS scheduling.
+            elif address in identity_addresses:
+                uc.reg_write(UC_ARM_REG_R0, 1)
+            elif address == (symbols['sceAppUtilSystemParamGetInt'] & ~1):
+                # Explicit Turkish-language fixture, never a physical OS query.
+                if uc.reg_read(UC_ARM_REG_R0) != 1:
+                    raise AssertionError('Unexpected system parameter request')
+                uc.mem_write(uc.reg_read(UC_ARM_REG_R1), struct.pack('<I', 19))
+                uc.reg_write(UC_ARM_REG_R0, 0)
+            elif address == (symbols['stat'] & ~1):
+                # Fresh-install preference path only; do not fake general file IO.
+                pointer = uc.reg_read(UC_ARM_REG_R0)
+                path = bytearray()
+                for index in range(4096):
+                    value = bytes(uc.mem_read(pointer+index, 1))
+                    if value == b'\0':
+                        break
+                    path.extend(value)
+                if not path.endswith(b'/Library/Preferences/com.gameloft.IronMan2.plist'):
+                    raise AssertionError('Unmodeled stat path: '+repr(bytes(path)))
+                uc.mem_write(g['OBJECT']+0x2000, struct.pack('<I', 2))
+                uc.reg_write(UC_ARM_REG_R0, 0xffffffff)
+            else:
+                return
+            uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+        u.hook_add(UC_HOOK_CODE, framework_os)
+        native('darwin_init', [])
+        native('objc_init', [])
+        for index in range(67):
+            name, target, kind = struct.unpack('<III', u.mem_read(symbols['class_imports']+12*index, 12))
+            if not name or not target or kind != 1:
+                raise RuntimeError('Production framework data binding is not initialized')
+            framework_bindings += 1
 
     symoff, nsyms, stroff, strsize = sym
     names = []
@@ -174,7 +230,10 @@ def main():
         'physical_vita_verified': False, 'gpu_verified': False,
         'os_heap_mutex_gpu_services': 'regression fixture, not native OS',
         'unbound_symbols_in_fixture': missing,
-        'unbound_class_note': 'Fixture does not call full objc_init; unbound class names are not an implementation audit.',
+        'frameworks_initialized': args.initialize_frameworks,
+        'framework_data_bindings': framework_bindings,
+        'framework_os_fixtures': 'Turkish language, absent fresh-install preferences, single-thread kernel mutex/thread identity fixtures' if args.initialize_frameworks else None,
+        'unbound_class_note': 'Real objc_init ran; methods remain partial.' if args.initialize_frameworks else 'Fixture does not call full objc_init; unbound class names are not an implementation audit.',
         'constructors_available': len(initializer_slots), 'constructors_entered': [],
         'constructors_returned': 0, 'imports_called': trace,
         'exception_unwinding_verified': False,
