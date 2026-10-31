@@ -33,6 +33,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/legacy_string.cpp
   source/imports.c
   source/libc_text.c
+  source/exit_registry.c
   source/darwin.c
   source/objc.c
   source/foundation.c

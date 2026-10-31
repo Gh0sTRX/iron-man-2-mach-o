@@ -15,7 +15,7 @@ static int failed;static int64_t seconds=978307200;static int microseconds=25000
 int __wrap_gettimeofday(struct timeval *tv,void *zone){(void)zone;if(failed){errno=EIO;return -1;}tv->tv_sec=seconds;tv->tv_usec=microseconds;return 0;}
 void fatal_error(const char *message,...){assert(message && *message);_Exit(73);}
 #define EMPTY(name) const import_entry name##_imports[]={{"_unused",0,0}};const int name##_imports_count=0
-EMPTY(patch);EMPTY(darwin);EMPTY(gles);EMPTY(gles_float);EMPTY(coreaudio);EMPTY(objc);EMPTY(eagl);EMPTY(cfbundle);EMPTY(cfarray);EMPTY(cf_memory);
+EMPTY(patch);EMPTY(exit_registry);EMPTY(darwin);EMPTY(gles);EMPTY(gles_float);EMPTY(coreaudio);EMPTY(objc);EMPTY(eagl);EMPTY(cfbundle);EMPTY(cfarray);EMPTY(cf_memory);
 EMPTY(legacy_stream);EMPTY(legacy_string);EMPTY(legacy_container);EMPTY(math_bridge);EMPTY(cg_geometry);EMPTY(libc_text);
 const import_entry *objc_class_import(const char *n){(void)n;return NULL;}
 static uintptr_t address(const char *n){const import_entry *p=imports_lookup(n);assert(p && p->data==0 && p->addr);return p->addr;}

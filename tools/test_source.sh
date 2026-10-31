@@ -224,3 +224,8 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/time_bridge.c vendor/ios-loader-boilerplate/source/imports.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -Wl,--wrap=gettimeofday -lm -o build/host-runtime/test_time_bridge
 build/host-runtime/test_time_bridge
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_exit_registry.c \
+  vendor/ios-loader-boilerplate/source/exit_registry.c -o build/host-runtime/test_exit_registry
+build/host-runtime/test_exit_registry

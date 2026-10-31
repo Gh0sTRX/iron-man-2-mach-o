@@ -35,6 +35,7 @@ jobs:
           build/arm-test-python/bin/python tests/test_arm_uikit_abi.py \
             --binary build/arm-uikit/uikit.bin --symbols build/arm-uikit/symbols.txt
           build/arm-test-python/bin/python tests/test_arm_runtime_bridges.py --elf build/loader-full/im2_ios_loader
+          build/arm-test-python/bin/python tests/test_owner_startup_replay.py --elf build/loader-full/im2_ios_loader
       - name: VPK remains blocked by missing runtime and hardware evidence
         run: |
           if python3 tools/check_vpk_release_gates.py --evidence docs/vpk_release_evidence.json; then

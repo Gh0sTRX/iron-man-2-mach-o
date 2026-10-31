@@ -20,6 +20,8 @@
 #include <unistd.h>
 
 #include "darwin_printf.h"
+#include "darwin.h"
+#include "exit_registry.h"
 #include "foundation.h"
 #include "hle.h"
 #include "imports.h"
@@ -148,7 +150,8 @@ static int d_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *n
 
 static void d_exit(int code) {
     l_info("guest invoked exit(%d)", code);
-    sceKernelExitProcess(0);
+    darwin_run_exit_callbacks();
+    sceKernelExitProcess(code);
 }
 
 // ---------------------------------------------------------------- networking (offline stub)
@@ -296,7 +299,6 @@ static int d_sem_post(d_sem *s) {
 
 // ---------------------------------------------------------------- C++ / blocks / exceptions
 
-static int d___cxa_atexit(void *f, void *a, void *d) { return 0; } // games never terminate cleanly
 static int d___cxa_guard_acquire(uint8_t *g) { return *g == 0; }
 static void d___cxa_guard_release(uint8_t *g) { *g = 1; }
 static void d___cxa_pure_virtual(void) { fatal_error("__cxa_pure_virtual"); }
@@ -415,7 +417,7 @@ const import_entry darwin_imports[] = {
     F(sem_close, d_sem_close), F(sem_unlink, d_sem_unlink), F(sem_wait, d_sem_wait),
     F(sem_post, d_sem_post),
     // C++ / blocks / exceptions / GCD
-    F(__cxa_atexit, d___cxa_atexit), F(__cxa_guard_acquire, d___cxa_guard_acquire),
+    F(__cxa_guard_acquire, d___cxa_guard_acquire),
     F(__cxa_guard_release, d___cxa_guard_release), F(__cxa_pure_virtual, d___cxa_pure_virtual),
     F(_Unwind_SjLj_Register, d_sjlj_noop), F(_Unwind_SjLj_Unregister, d_sjlj_noop),
     F(_Unwind_SjLj_Resume, d_sjlj_resume), V(_NSConcreteStackBlock, d_NSConcreteStackBlock),
@@ -442,7 +444,12 @@ const import_entry darwin_imports[] = {
 };
 const int darwin_imports_count = sizeof(darwin_imports) / sizeof(darwin_imports[0]);
 
+static void guest_exit_call(void *ctx,uintptr_t fn,uintptr_t arg,int has_arg){
+    (void)ctx;call_guest((void *)fn,has_arg?(uint32_t)arg:0,0,0,0);
+}
+void darwin_run_exit_callbacks(void){if(im2_exit_run())fatal_error("Guest exit callback drain failed");}
 void darwin_init(void) {
+    if(im2_exit_init(guest_exit_call,NULL))fatal_error("Guest exit registry initialization failed");
     d_stderrp = stderr;
     d_stdinp = stdin;
 }

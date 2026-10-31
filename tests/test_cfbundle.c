@@ -12,7 +12,7 @@
 /* Unrelated backends are absent in this CPU-only fixture. The CF table and
  * production import router are linked unmodified. No Vita/GPU execution claim. */
 #define EMPTY(name) const import_entry name##_imports[]={{"_fixture_unused",0,0}};const int name##_imports_count=0
-EMPTY(cf_memory);EMPTY(cfarray);EMPTY(cg_geometry);EMPTY(math_bridge);EMPTY(legacy_container);EMPTY(legacy_stream);EMPTY(legacy_string);EMPTY(patch);EMPTY(libc_text);EMPTY(time_bridge);EMPTY(darwin);EMPTY(gles_float);EMPTY(gles);EMPTY(coreaudio);EMPTY(objc);EMPTY(eagl);
+EMPTY(cf_memory);EMPTY(cfarray);EMPTY(cg_geometry);EMPTY(math_bridge);EMPTY(legacy_container);EMPTY(legacy_stream);EMPTY(legacy_string);EMPTY(patch);EMPTY(libc_text);EMPTY(time_bridge);EMPTY(exit_registry);EMPTY(darwin);EMPTY(gles_float);EMPTY(gles);EMPTY(coreaudio);EMPTY(objc);EMPTY(eagl);
 const import_entry *objc_class_import(const char *name){(void)name;return NULL;}
 static char temporary_root[512];
 static const char *map(const char *in,char *out,size_t n){

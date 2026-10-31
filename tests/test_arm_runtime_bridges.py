@@ -20,6 +20,7 @@ STACK=0x20000000;HEAP=0x21000000;OBJECT=0x22000000;STOP=0x23000000
 for base,size in ((STACK,0x10000),(HEAP,0x100000),(OBJECT,0x10000),(STOP,0x1000)):u.mem_map(base,size)
 u.reg_write(UC_ARM_REG_C1_C0_2,0x00f00000);u.reg_write(UC_ARM_REG_FPEXC,0x40000000)
 next_alloc=HEAP;live={};calls=0
+hook_symbol_addresses={value&~1 for value in symbols.values()}
 
 gles_capture={};gles_seen=[];once_seen=set();tls_values={};tls_next=1
 ONCE_RETURN=STOP+0x200
@@ -33,6 +34,7 @@ def allocate(n):
 
 def hook(uc,addr,size,_):
  global tls_next
+ if addr not in hook_symbol_addresses and addr not in gles_capture:return
  def matches(*names):return any(addr==(symbols[n]&~1) for n in names if n in symbols)
  def arg(n):return uc.reg_read((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2)[n])
  def returned(value=None):
@@ -823,3 +825,31 @@ for align in (0,4):
  assert call('im2_objc_pool_drain',[pool],align)==0
  assert call('im2_objc_retain_count',[a],align)==0 and call('im2_objc_retain_count',[b],align)==0
 print(f'PASS: {calls-time_start} actual ARM time/NSDate calls, real objc_msgSend double inputs/results, UTC 44-byte calendar, 1970/2001 epochs, nanosecond reference precision and real autorelease cleanup. Wall clock/TLS OS services modeled; no hardware time verification.')
+
+# Actual ARM and Thumb guest callback bodies, through production call_guest.
+for table in ('exit_registry_imports',):
+ n=struct.unpack('<I',read(symbols[table+'_count'],4))[0]
+ for i in range(n):
+  name,t,k=struct.unpack('<III',read(symbols[table]+12*i,12));entries[cstring(name)]=(t,k)
+for name in ('darwin_init','darwin_run_exit_callbacks','im2_exit_pending'):
+ entries['__'+name]=(symbols[name],0)
+exit_start=calls
+EXIT_CODE=0x26000000;u.mem_map(EXIT_CODE,0x1000)
+LOG=OBJECT+0xb000;put(LOG,0,0,0,0,0)
+# push {r4,lr}; load count; append arg; increment; clobber guest-scratch r9;
+# pop {r4,pc}; literals. These are synthetic callback tests, not owner code.
+u.mem_write(EXIT_CODE,struct.pack('<11I',0xe92d4010,0xe59f1018,0xe5912000,0xe59f3014,
+ 0xe7830102,0xe2822001,0xe5812000,0xe3a09099,0xe8bd8010,LOG,LOG+4))
+# Thumb: movs r0,#77; ldr r3,[pc,#4]; bx r3; nop; .word ARM callback
+u.mem_write(EXIT_CODE+128,struct.pack('<4HI',0x204d,0x4b01,0x4718,0xbf00,EXIT_CODE))
+call('darwin_init',[])
+for align in (0,4):
+ put(LOG,0,0,0,0,0)
+ assert call('___cxa_atexit',[EXIT_CODE,10,0x1000],align)==0
+ assert call('_atexit',[EXIT_CODE+129],align)==0
+ assert call('___cxa_atexit',[EXIT_CODE,20,0x2000],align)==0
+ assert call('im2_exit_pending',[],align)==3
+ call('darwin_run_exit_callbacks',[],align)
+ assert get(LOG,4)==(3,20,77,10) and call('im2_exit_pending',[],align)==0
+ call('darwin_run_exit_callbacks',[],align);assert pointer(LOG)==3
+print(f'PASS: {calls-exit_start} ARM exit-registry calls; actual ARM/Thumb guest callbacks, mixed LIFO/exactly-once and guest r9 clobber preserved by production call_guest.')

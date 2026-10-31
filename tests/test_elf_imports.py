@@ -210,3 +210,13 @@ for i in range(time_count):
 assert time_entries=={'_CFAbsoluteTimeGetCurrent':(symbols['cf_now'],0),'_time':(symbols['time_now'],0),
                       '_difftime':(symbols['time_difference'],0),'_gmtime':(symbols['utc'],0)}
 print('PASS: CF/Unix time and Darwin UTC calendar imports route to typed ABI bridges')
+
+exit_count=struct.unpack('<I',read(symbols['exit_registry_imports_count'],4))[0]
+assert exit_count==2
+exit_entries={}
+for i in range(exit_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['exit_registry_imports']+12*i,12))
+    assert target and kind==0;exit_entries[cstring(name)]=target
+assert set(exit_entries)=={'_atexit','___cxa_atexit'}
+assert 'd___cxa_atexit' not in symbols,'Old no-op exit registration must not remain'
+print('PASS: real guest atexit/C++ lifetime registry replaces the old no-op binding')

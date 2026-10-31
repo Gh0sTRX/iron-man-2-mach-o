@@ -7,3 +7,5 @@
 
 void darwin_init(void);
 const char *darwin_path(const char *in, char *out, size_t outlen);
+
+void darwin_run_exit_callbacks(void);

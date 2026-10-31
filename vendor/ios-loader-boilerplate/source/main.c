@@ -112,6 +112,7 @@ int main(int argc, char *argv[]) {
     static char arg0[]=BUNDLE_PATH "IronMan2";
     static char *guest_argv[]={arg0,NULL};
     int result=(int)call_guest((void *)entry,1,(uint32_t)guest_argv,0,0);
+    darwin_run_exit_callbacks();
     l_info("Guest main returned %d",result);
     return result;
 }
