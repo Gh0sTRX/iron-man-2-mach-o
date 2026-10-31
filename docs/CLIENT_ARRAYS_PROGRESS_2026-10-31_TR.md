@@ -42,3 +42,7 @@ Tam Vita ARM ELF'inde **95 yeni üretim client-array çağrısı** çalıştır�
 ## Durum
 
 490 importtan **305 ad eşleşir, 185 ad eksiktir**. Bu ad kapsamıdır; tamamlanma yüzdesi değildir. Compressed texture, readback, float/bool/string queries, hint, tex-env çağrıları ve daha geniş sunum/server-state restorasyonu grafik tarafında hâlâ açıktır. Framework/C++/sistem/ses açıkları sürer. Yürütme/paketleme korumaları değiştirilmedi; SELF/VPK üretilmedi.
+
+## GitHub CI
+
+Kaynak `7cfd999f744abfba3ce6384d08e881ea3d8b5f80`, [Actions 41231740096](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41231740096): hesap ödeme/harcama limiti uyarısıyla job başlamadı; test adımları çalışmadı. Yeni kaynak için CI başarısı iddia edilmez. Doğrulamalar yerel managed ortam sonuçlarıdır. Hesap ayarları değiştirilmedi veya engelli job tekrar başlatılmadı.
