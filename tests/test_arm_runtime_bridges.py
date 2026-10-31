@@ -395,3 +395,97 @@ for align in (0,4):
  assert call('_glGetError',[],align)==0x500
  assert call('_glGetError',[],align)==0
 print(f'PASS: {calls-gles_start} GLES ARM state/error calls, 19 import entries, register/stack-to-VFP forwarding, scalar/vector lighting, matrix pointers and first-error guards at both alignments. VitaGL entrypoints captured; no GPU output verified.')
+
+# Actual guest draw/array imports -> production converter -> captured VitaGL.
+# This tests the CPU path and state restoration, not rasterization or GPU copies.
+for name in ('gles_client_arrays_init','gles_client_arrays_restore','gles_get_draw_calls'):
+ entries['__'+name]=(symbols[name],0)
+array_native={symbols[name]&~1:name for name in ('glVertexPointer','glColorPointer','glNormalPointer',
+ 'glTexCoordPointer','glClientActiveTexture','glEnableClientState','glDisableClientState',
+ 'glDrawArrays','glDrawElements')}
+array_state={};array_enabled=set();array_unit=0;array_draws=[]
+
+def array_hook(uc,address,size,_):
+ global array_unit
+ if address not in array_native:return
+ name=array_native[address]
+ args=[uc.reg_read(r) for r in (UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3)]
+ def slot(cap):return {0x8074:0,0x8076:1,0x8075:2,0x8078:3+array_unit}[cap]
+ if name=='glClientActiveTexture':array_unit=args[0]-0x84c0;assert array_unit in (0,1)
+ elif name in ('glEnableClientState','glDisableClientState'):
+  if name=='glEnableClientState':array_enabled.add(slot(args[0]))
+  else:array_enabled.discard(slot(args[0]))
+ elif name.endswith('Pointer'):
+  if name=='glNormalPointer':s=2;n=3;typ,stride,p=args[:3]
+  else:
+   s=0 if name=='glVertexPointer' else 1 if name=='glColorPointer' else 3+array_unit
+   n,typ,stride,p=args
+  array_state[s]=(n,typ,stride,p)
+ else:
+  if name=='glDrawElements':
+   mode,count,typ,p=args
+   assert typ in (0x1401,0x1403)
+   indices=list(uc.mem_read(p,count)) if typ==0x1401 else list(struct.unpack('<'+'H'*count,uc.mem_read(p,count*2)))
+  else:mode,first,count=args[:3];indices=list(range(first,first+count))
+  attributes={}
+  for s in array_enabled:
+   n,typ,stride,p=array_state[s];assert p and typ in (0x1406,0x1401)
+   bpc=4 if typ==0x1406 else 1;step=stride or bpc*n
+   attributes[s]=[tuple(struct.unpack('<'+'f'*n,uc.mem_read(p+i*step,n*4))) if bpc==4 else tuple(uc.mem_read(p+i*step,n)) for i in indices]
+  array_draws.append((name,mode,indices,attributes))
+ uc.reg_write(UC_ARM_REG_R0,0);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+u.hook_add(UC_HOOK_CODE,array_hook)
+array_start=calls
+assert call('gles_client_arrays_init',[])==0
+V=OBJECT+0x8000;C=V+64;N=C+64;T0=N+64;T1=T0+64;IDX=T1+64;OUT=IDX+32
+for i in range(3):
+ u.mem_write(V+10*i,struct.pack('<ii',(i+1)*65536,-(i+1)*32768))
+put(C,*([65536,32768,0,65536]*3))
+put(N,*([0,0,65536]*3));put(T0,*([0,65536]*3));put(T1,*([32768,16384]*3))
+u.mem_write(IDX,bytes([2,0,2]));u.mem_write(IDX+9,struct.pack('<3H',2,1,0))
+for align in (0,4):
+ call('_glVertexPointer',[2,0x140c,10,V],align);call('_glEnableClientState',[0x8074],align)
+ call('_glColorPointer',[4,0x140c,0,C],align);call('_glEnableClientState',[0x8076],align)
+ call('_glNormalPointer',[0x140c,0,N],align);call('_glEnableClientState',[0x8075],align)
+ call('_glClientActiveTexture',[0x84c0],align);call('_glTexCoordPointer',[2,0x140c,0,T0],align);call('_glEnableClientState',[0x8078],align)
+ call('_glClientActiveTexture',[0x84c1],align);call('_glTexCoordPointer',[2,0x140c,0,T1],align);call('_glEnableClientState',[0x8078],align)
+ before=call('gles_get_draw_calls',[],align)
+ call('_glDrawElements',[4,3,0x1401,IDX],align)
+ name,mode,ix,attrs=array_draws[-1]
+ assert name=='glDrawElements' and mode==4 and ix==[2,0,2]
+ assert attrs[0]==[(3.,-1.5),(1.,-.5),(3.,-1.5)]
+ assert attrs[1]==[(1.,.5,0.,1.)]*3 and attrs[2]==[(0.,0.,1.)]*3
+ assert attrs[3]==[(0.,1.)]*3 and attrs[4]==[(.5,.25)]*3 and array_unit==1
+ call('_glDrawElements',[5,3,0x1403,IDX+9],align);assert array_draws[-1][2]==[2,1,0]
+ call('_glDrawArrays',[4,1,2],align);assert array_draws[-1][2]==[1,2] and array_draws[-1][3][0]==[(2.,-1.),(3.,-1.5)]
+ assert call('gles_get_draw_calls',[],align)==before+3
+ for pname,pointer_expected in ((0x8090,V),(0x8092,C),(0x8091,N),(0x8098,T1)):
+  call('_glGetPointerv',[pname,OUT],align);assert pointer(OUT)==pointer_expected
+ for pname,expected in ((0x807b,0x140c),(0x807c,10),(0x84e1,0x84c1)):
+  call('_glGetIntegerv',[pname,OUT],align);assert pointer(OUT)==expected
+ # Simulate presentation overwriting client pointers/flags without running GPU.
+ array_state.clear();array_enabled.clear();array_unit=0
+ call('gles_client_arrays_restore',[],align)
+ assert set(array_state)=={0,1,2,3,4} and array_enabled=={0,1,2,3,4} and array_unit==1
+ # No backend draw for negative counts, unsupported index width, NULL enabled
+ # arrays, unsupported texture units or budgets; actual GLES error slot is used.
+ before=len(array_draws)
+ for fn,args,error in (
+  ('_glDrawElements',[4,0xffffffff,0x1403,IDX],0x501),
+  ('_glDrawElements',[4,3,0x1405,IDX],0x500),
+  ('_glDrawElements',[4,3,0x1403,0],0x502),
+  ('_glDrawElements',[4,3,0x1403,0xfffffffe],0x502),
+  ('_glDrawArrays',[4,0,65537],0x505),
+  ('_glClientActiveTexture',[0x84c2],0x500)):
+  call(fn,args,align);assert call('_glGetError',[],align)==error
+ assert len(array_draws)==before and array_unit==1
+ call('_glNormalPointer',[0x140c,0,0],align);call('_glDrawArrays',[4,0,3],align)
+ assert call('_glGetError',[],align)==0x502 and len(array_draws)==before
+ call('_glDisableClientState',[0x8075],align);call('_glDrawArrays',[4,0,3],align)
+ assert 2 not in array_draws[-1][3] and call('_glGetError',[],align)==0
+ before=len(array_draws)
+ call('_glVertexPointer',[2,0x140c,0x7fffffff,0xfffffff0],align)
+ call('_glDrawArrays',[4,0,3],align);assert call('_glGetError',[],align)==0x502
+ assert len(array_draws)==before
+ call('_glVertexPointer',[2,0x140c,10,V],align)
+print(f'PASS: {calls-array_start} production ARM client-array calls, fixed color/normal/two-texture data, byte strides, u8/unaligned-u16 indexed draws, original pointer/query state, restoration and error guards; VitaGL draw boundary captured, no GPU image.')

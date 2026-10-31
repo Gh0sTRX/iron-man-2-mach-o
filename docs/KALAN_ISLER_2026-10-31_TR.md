@@ -22,6 +22,7 @@ Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştir
 | Matematik | 23 eksik libm/sayı okuma çağrısına açık iOS ABI köprüsü; 56 gerçek ARM test çağrısı | Fiziksel Vita/oyun sayısal doğrulaması değil |
 | Ayar/dil | Yeni kurulum için gerçek sistem dilini sorgulayan salt okunur AppleLanguages yolu | Eski tercih plist'leri, ülke/locale ve kaydetme eksik |
 | UIKit başlangıcı | AppController delegate başlatma, pencere/view sahipliği, ekran ve bazı frame/bounds metotları | Tam UIKit widget/event sistemi değil |
+| Model verisi / indexed draw | Vertex/color/normal/iki texture dizisi, güvenli fixed dönüşümü ve u8/u16 DrawElements; 95 ARM çağrısı | VitaGL girişleri yakalandı; modelin GPU görüntüsü ve performansı açık |
 | GLES komut aktarımı | 19 renk/derinlik/sis/matris/malzeme/ışık importu; 100 ARM çağrısı | Backend girişleri yakalandı; GPU/ışıklandırma görüntüsü doğrulanmadı |
 | Grafik | EAGLContext/layer, OES kaynak eşlemesi, RGB565/RGBA8 ve depth16 backend yolu | Host fixture ve ARM derleme; GPU görüntüsü cihazda doğrulanmadı |
 | Çizim döngüsü | Özgün 1/60 saniyelik NSTimer/draw yolu için scheduler ve native sürücü | Özgün draw fonksiyonu Vita'da çalıştırılmadı |
@@ -30,7 +31,7 @@ Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştir
 
 ### 1. İlk gerçek açılışı engelleyen iOS bağımlılıkları
 
-Özgün 490 import adının **302'si** tablolarla eşleşiyor; **188 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **25'i kısmi**, **39'u uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
+Özgün 490 import adının **305'i** tablolarla eşleşiyor; **185 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **25'i kısmi**, **39'u uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
 
 Eksik Apple/CoreFoundation/UIKit API'leri, C/C++ runtime bağlantıları, bazı GLES çağrıları ve sistem/dosya/ağ işlevleri gerçek davranışlarıyla ele alınmalı. `NSLocale`, `NSRunLoop`, çeşitli UIKit/medya sınıfları hâlâ eksik örneklerdir. NSBundle/tercih plist okuma ve gerekirse diğer veri formatları tamamlanmalı; oyun sürümü/ayarları uydurulmamalı.
 
@@ -70,14 +71,14 @@ CFBundleGetMainBundle, CFBundleCopyBundleURL, CFBundleCopyResourcesDirectoryURL,
 
 ## Son kontrol sayıları
 
-- 44 C/C++/ASM biriminin VitaSDK ARM ELF bağlantısı başarılı; güçlü undefined ELF sembolü yok.
+- 45 C/C++/ASM biriminin VitaSDK ARM ELF bağlantısı başarılı; güçlü undefined ELF sembolü yok.
 - Yerel host ASan/UBSan testleri başarılı; yeni CFBundle testi gerçek import router'ını ve kaynak dosyası byte'larını kullanıyor.
 - Üretim assembly'siyle 25 sentetik ARM/Thumb dispatch ve 6 üretim UIKit CGRect ABI emülasyon senaryosu başarılı.
 - Özgün oyunun native Vita boot'u, menü ve cihaz testi: **doğrulanmadı**.
 
 Tam eksik isim envanteri [REMAINING_BINDINGS_2026-10-31.json](REMAINING_BINDINGS_2026-10-31.json), yerel derleme kanıtı [BUILD_EVIDENCE_2026-10-31.json](BUILD_EVIDENCE_2026-10-31.json) içindedir.
 
-**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 188 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
+**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 185 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
 
 Yeni C++ katmanı ve özgün çağrı yerleri: [LEGACY_CPP_PROGRESS_2026-10-31_TR.md](LEGACY_CPP_PROGRESS_2026-10-31_TR.md).
 
@@ -88,3 +89,5 @@ Yeni düğüm ve geometri kodu: [CONTAINERS_GEOMETRY_PROGRESS_2026-10-31_TR.md](
 CF dizi sahipliği ve runtime entegrasyonu: [CFARRAY_PROGRESS_2026-10-31_TR.md](CFARRAY_PROGRESS_2026-10-31_TR.md).
 
 GLES state/ışık/matris köprüleri: [GLES_STATE_PROGRESS_2026-10-31_TR.md](GLES_STATE_PROGRESS_2026-10-31_TR.md).
+
+Client arrays ve indeksli model çizimi: [CLIENT_ARRAYS_PROGRESS_2026-10-31_TR.md](CLIENT_ARRAYS_PROGRESS_2026-10-31_TR.md).

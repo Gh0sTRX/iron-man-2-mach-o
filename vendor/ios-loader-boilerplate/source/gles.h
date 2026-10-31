@@ -28,3 +28,7 @@ int gles_eagl_present(uint32_t renderbuffer_target);
 
 /* Shared first-error slot for GLES compatibility bridges. */
 void gles_record_error(uint32_t error);
+
+/* CPU client-array registry, also used for asset-free ARM integration tests. */
+int gles_client_arrays_init(void);
+void gles_client_arrays_restore(void);

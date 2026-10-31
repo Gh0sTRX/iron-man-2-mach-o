@@ -15,6 +15,7 @@
 
 #include "gles.h"
 #include "gles_oes.h"
+#include "gles_arrays.h"
 #include "display_geometry.h"
 #include "hle.h"
 #include "imports.h"
@@ -41,99 +42,41 @@ static GLenum oes_error;
 void gles_record_error(uint32_t e){if(e && !oes_error)oes_error=e;}
 static GLenum g_glGetError(void){GLenum e=oes_error;if(e){oes_error=0;return e;}return glGetError();}
 
-// Cached state overwritten during blit that glGet cannot fully query:
-typedef struct {
-    GLint size;
-    GLenum type;
-    GLsizei stride;
-    const void *ptr;
-} array_ptr;
-static array_ptr vtx, tc[2];
-static int client_unit; // glClientActiveTexture - GL_TEXTURE0
+static Im2Arrays *arrays;
 static GLint env_mode = GL_MODULATE;
-static GLfixed color[4] = {0x10000, 0x10000, 0x10000, 0x10000};
-
-// ---------------------------------------------------------------- GL_FIXED arrays
-
-static float *conv_buf[3];
-static int conv_cap[3];
-
-static const void *fixed_to_float(const array_ptr *a, int n, int slot) {
-    int need = n * a->size;
-    if (need > conv_cap[slot]) {
-        conv_buf[slot] = realloc(conv_buf[slot], need * sizeof(float));
-        conv_cap[slot] = need;
-    }
-    int step = a->stride ? a->stride / 4 : a->size;
-    const int32_t *src = a->ptr;
-    float *dst = conv_buf[slot];
-    for (int i = 0; i < n; i++)
-        for (int c = 0; c < a->size; c++)
-            dst[i * a->size + c] = src[i * step + c] * (1.0f / 65536.0f);
-    return dst;
-}
-
-static void apply_vertex(int n) {
-    if (!vtx.size || (vtx.type == GL_FIXED && !n)) // GL_FIXED arrays are converted at draw time
-        return;
-    if (vtx.type == GL_FIXED)
-        glVertexPointer(vtx.size, GL_FLOAT, 0, fixed_to_float(&vtx, n, 0));
-    else
-        glVertexPointer(vtx.size, vtx.type, vtx.stride, vtx.ptr);
-}
-
-static void apply_texcoord(int unit, int n) {
-    array_ptr *a = &tc[unit];
-    if (!a->size || (a->type == GL_FIXED && !n))
-        return;
-    glClientActiveTexture(GL_TEXTURE0 + unit);
-    if (a->type == GL_FIXED)
-        glTexCoordPointer(a->size, GL_FLOAT, 0, fixed_to_float(a, n, 1 + unit));
-    else
-        glTexCoordPointer(a->size, a->type, a->stride, a->ptr);
-    glClientActiveTexture(GL_TEXTURE0 + client_unit);
-}
-
-static void g_glVertexPointer(GLint size, GLenum type, GLsizei stride, const void *ptr) {
-    vtx = (array_ptr){size, type, stride, ptr};
-    apply_vertex(0);
-}
-
-static void g_glTexCoordPointer(GLint size, GLenum type, GLsizei stride, const void *ptr) {
-    tc[client_unit] = (array_ptr){size, type, stride, ptr};
-    apply_texcoord(client_unit, 0);
-}
-
-static void g_glClientActiveTexture(GLenum unit) {
-    client_unit = (unit - GL_TEXTURE0) & 1;
-    glClientActiveTexture(unit);
-}
-
+static GLfixed color[4] = {0x10000,0x10000,0x10000,0x10000};
 static uint32_t gles_draw_calls;
-
-uint32_t gles_get_draw_calls(void) {
-    return gles_draw_calls;
+uint32_t gles_get_draw_calls(void){return gles_draw_calls;}
+static void array_pointer(void *ctx,unsigned slot,int size,uint32_t type,int stride,const void *p){
+    (void)ctx;
+    if(slot==IM2_ARRAY_VERTEX)glVertexPointer(size,type,stride,p);
+    else if(slot==IM2_ARRAY_COLOR)glColorPointer(size,type,stride,p);
+    else if(slot==IM2_ARRAY_NORMAL)glNormalPointer(type,stride,p);
+    else glTexCoordPointer(size,type,stride,p);
 }
-
-static void g_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
-    gles_draw_calls++;
-    int n = first + count;
-    if (vtx.type == GL_FIXED)
-        apply_vertex(n);
-    for (int u = 0; u < 2; u++)
-        if (tc[u].type == GL_FIXED)
-            apply_texcoord(u, n);
-    glDrawArrays(mode, first, count);
+static void array_enable(void *ctx,unsigned slot,int on){
+    (void)ctx;GLenum cap=slot==IM2_ARRAY_VERTEX?GL_VERTEX_ARRAY:slot==IM2_ARRAY_COLOR?GL_COLOR_ARRAY:slot==IM2_ARRAY_NORMAL?GL_NORMAL_ARRAY:GL_TEXTURE_COORD_ARRAY;
+    if(on)glEnableClientState(cap);else glDisableClientState(cap);
 }
-
-static void g_glGetPointerv(GLenum pname, void **out) {
-    if (pname == GL_VERTEX_ARRAY_POINTER)
-        *out = (void *)vtx.ptr;
-    else if (pname == GL_TEXTURE_COORD_ARRAY_POINTER)
-        *out = (void *)tc[client_unit].ptr;
-    else
-        glGetPointerv(pname, out);
+static void array_unit(void *ctx,uint32_t unit){(void)ctx;glClientActiveTexture(unit);}
+static void array_draw(void *ctx,uint32_t mode,int first,int count){(void)ctx;gles_draw_calls++;glDrawArrays(mode,first,count);}
+static void array_elements(void *ctx,uint32_t mode,int count,uint32_t type,const void *p){(void)ctx;gles_draw_calls++;glDrawElements(mode,count,type,p);}
+int gles_client_arrays_init(void){
+    if(arrays)return -1;
+    arrays=im2_arrays_create((Im2ArrayBackend){NULL,array_pointer,array_enable,array_unit,array_draw,array_elements});
+    return arrays?0:-1;
 }
+void gles_client_arrays_restore(void){im2_arrays_restore(arrays);}
+static void g_glVertexPointer(GLint n,GLenum t,GLsizei stride,const void *p){gles_record_error(im2_arrays_set(arrays,IM2_ARRAY_VERTEX,n,t,stride,p));}
+static void g_glColorPointer(GLint n,GLenum t,GLsizei stride,const void *p){gles_record_error(im2_arrays_set(arrays,IM2_ARRAY_COLOR,n,t,stride,p));}
+static void g_glNormalPointer(GLenum t,GLsizei stride,const void *p){gles_record_error(im2_arrays_set(arrays,IM2_ARRAY_NORMAL,3,t,stride,p));}
+static void g_glTexCoordPointer(GLint n,GLenum t,GLsizei stride,const void *p){gles_record_error(im2_arrays_set(arrays,IM2_ARRAY_TEX0+im2_arrays_unit(arrays)-GL_TEXTURE0,n,t,stride,p));}
+static void g_glClientActiveTexture(GLenum unit){gles_record_error(im2_arrays_client_unit(arrays,unit));}
+static void g_glEnableClientState(GLenum cap){gles_record_error(im2_arrays_enable(arrays,cap,1));}
+static void g_glDisableClientState(GLenum cap){gles_record_error(im2_arrays_enable(arrays,cap,0));}
+static void g_glDrawArrays(GLenum mode,GLint first,GLsizei count){gles_record_error(im2_arrays_draw(arrays,mode,first,count));}
+static void g_glDrawElements(GLenum mode,GLsizei count,GLenum type,const void *p){gles_record_error(im2_arrays_elements(arrays,mode,count,type,p));}
+static void g_glGetPointerv(GLenum pname,void **p){gles_record_error(im2_arrays_get_pointer(arrays,pname,p));}
 
 // ---------------------------------------------------------------- *x state
 
@@ -219,7 +162,7 @@ static void g_glGetIntegerv(GLenum pname,GLint *value){
     if(!value){gles_record_error(IM2_OES_VALUE);return;}
     if(pname==0x8CA6u)*value=(GLint)im2_oes_binding(oes,IM2_OES_FB);
     else if(pname==0x8CA7u)*value=(GLint)im2_oes_binding(oes,IM2_OES_RB);
-    else glGetIntegerv(pname,value);
+    else if(!im2_arrays_parameter(arrays,pname,value))glGetIntegerv(pname,value);
 }
 
 // ---------------------------------------------------------------- init / present
@@ -228,9 +171,10 @@ void gles_init(void) {
     vglUseTripleBuffering(GL_FALSE);
     fbo_ready=vglInitExtended(0,SCR_W,SCR_H,8*1024*1024,SCE_GXM_MULTISAMPLE_NONE);
     if(!fbo_ready){l_error("vitaGL initialization failed");return;}
+    if(gles_client_arrays_init()){fbo_ready=0;l_error("Client array registry allocation failed");return;}
     oes=im2_oes_create((Im2OesBackend){NULL,native_new_fb,native_delete_fb,native_bind_fb,
         native_storage,native_delete_storage,native_attach,native_check});
-    if(!oes){fbo_ready=0;l_error("OES framebuffer registry allocation failed");return;}
+    if(!oes){im2_arrays_destroy(arrays);arrays=NULL;fbo_ready=0;l_error("OES framebuffer registry allocation failed");return;}
     glViewport(0,0,FB_W,FB_H);
     l_info("vitaGL initialized; guest must allocate and attach its OES drawable before presentation");
 }
@@ -247,17 +191,13 @@ int gles_eagl_present(uint32_t target){
 
 void gles_present(void) {
     static const GLenum caps[] = {GL_BLEND, GL_ALPHA_TEST, GL_SCISSOR_TEST, GL_DEPTH_TEST, GL_TEXTURE_2D};
-    GLboolean on[5], tca, va, ca, na;
+    GLboolean on[5];
     GLint tex, mode, active, vp[4];
     for (int i = 0; i < 5; i++)
         on[i] = glIsEnabled(caps[i]);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
     glActiveTexture(GL_TEXTURE0);
     glClientActiveTexture(GL_TEXTURE0);
-    tca = glIsEnabled(GL_TEXTURE_COORD_ARRAY);
-    va = glIsEnabled(GL_VERTEX_ARRAY);
-    ca = glIsEnabled(GL_COLOR_ARRAY);
-    na = glIsEnabled(GL_NORMAL_ARRAY);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex);
     glGetIntegerv(GL_MATRIX_MODE, &mode);
     glGetIntegerv(GL_VIEWPORT, vp);
@@ -267,6 +207,9 @@ void gles_present(void) {
     for (int i = 0; i < 4; i++)
         glDisable(caps[i]);
     glEnable(GL_TEXTURE_2D);
+    glClientActiveTexture(GL_TEXTURE1);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glClientActiveTexture(GL_TEXTURE0);
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisableClientState(GL_COLOR_ARRAY);
@@ -304,18 +247,8 @@ void gles_present(void) {
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, env_mode);
     for (int i = 0; i < 5; i++)
         on[i] ? glEnable(caps[i]) : glDisable(caps[i]);
-    if (!va)
-        glDisableClientState(GL_VERTEX_ARRAY);
-    if (!tca)
-        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-    if (ca)
-        glEnableClientState(GL_COLOR_ARRAY);
-    if (na)
-        glEnableClientState(GL_NORMAL_ARRAY);
-    glColor4x(color[0], color[1], color[2], color[3]);
-    apply_vertex(0);
-    apply_texcoord(0, 0);
-    glClientActiveTexture(GL_TEXTURE0 + client_unit);
+    glColor4x(color[0],color[1],color[2],color[3]);
+    gles_client_arrays_restore();
     glActiveTexture(active);
 }
 
@@ -331,13 +264,14 @@ const import_entry gles_imports[] = {
     // Floating-point calls require explicit iOS SoftFP bridges; do not map directly.
     D(glColorMask), D(glCullFace), D(glDepthFunc), D(glFrontFace), D(glPixelStorei),
     D(glActiveTexture), D(glBindTexture), D(glBlendFunc), D(glClear), D(glCopyTexImage2D),
-    D(glCopyTexSubImage2D), D(glDeleteTextures), D(glDepthMask), D(glDisable), D(glDisableClientState),
-    D(glEnable), D(glEnableClientState), D(glGenTextures), F(glGetIntegerv,g_glGetIntegerv), F(glGetError,g_glGetError), D(glIsEnabled),
+    D(glCopyTexSubImage2D), D(glDeleteTextures), D(glDepthMask), D(glDisable), F(glDisableClientState,g_glDisableClientState),
+    D(glEnable), F(glEnableClientState,g_glEnableClientState), D(glGenTextures), F(glGetIntegerv,g_glGetIntegerv), F(glGetError,g_glGetError), D(glIsEnabled),
     D(glLoadIdentity), D(glLoadMatrixx), D(glMatrixMode), D(glOrthox), D(glPopMatrix), D(glPushMatrix),
     D(glRotatex), D(glScalex), D(glScissor), D(glShadeModel), D(glTexImage2D), D(glTexParameteri),
     D(glTexSubImage2D), D(glTranslatex), D(glViewport),
     F(glColor4x, g_glColor4x), F(glTexEnvi, g_glTexEnvi), F(glTexEnvxv, g_glTexEnvxv),
     F(glTexParameterx, g_glTexParameterx), F(glGetFixedv, g_glGetFixedv),
+    F(glColorPointer,g_glColorPointer), F(glNormalPointer,g_glNormalPointer), F(glDrawElements,g_glDrawElements),
     F(glVertexPointer, g_glVertexPointer), F(glTexCoordPointer, g_glTexCoordPointer),
     F(glClientActiveTexture, g_glClientActiveTexture), F(glDrawArrays, g_glDrawArrays),
     F(glGetPointerv, g_glGetPointerv),

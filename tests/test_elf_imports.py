@@ -167,3 +167,10 @@ for name in ('glFogfv','glLightModelfv','glLoadMatrixf','glMaterialfv','glMultMa
     assert gf_entries['_'+name]==(symbols[name],0)
 assert '_glGetLightxv' not in gles_entries,'Unsupported old zero-filled light query must not be advertised'
 print('PASS: 19 GLES state imports use explicit scalar ABI bridges or pointer/integer-safe backend entries; light validation bridge and no fake light getter')
+
+for name in ('glColorPointer','glNormalPointer','glDrawElements','glVertexPointer',
+             'glTexCoordPointer','glClientActiveTexture','glEnableClientState',
+             'glDisableClientState','glDrawArrays','glGetPointerv'):
+    assert gles_entries['_'+name]==(symbols['g_'+name],0), name
+assert 'im2_arrays_draw' in symbols and 'im2_arrays_elements' in symbols
+print('PASS: guest client arrays and both draw forms route to checked conversion/state bridges')
