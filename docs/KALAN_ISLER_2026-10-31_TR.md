@@ -2,7 +2,7 @@
 
 31 Ekim 2026 — `Gh0sTRX/iron-man-2-mach-o`, `experiment/ios-macho-loader`.
 
-**Şu an:** Yükleyici ve kısmi iOS uyumluluk kodu derleniyor; otomatik testler geçiyor. **Özgün oyun native Vita yükleyicisiyle henüz açılmadı.** Vita menüsü, oynanış ve fiziksel cihaz başarısı doğrulanmadı. Linux touchHLE'de görülen gerçek menü ayrı bir referans çalışmasıdır.
+**Şu an:** Yükleyici ve kısmi iOS uyumluluk kodu derleniyor; yerel otomatik testler geçiyor. Son GitHub Actions işi hesap ödeme/harcama limiti nedeniyle başlamadı; son kaynak commit için CI başarısı iddia edilmiyor. **Özgün oyun native Vita yükleyicisiyle henüz açılmadı.** Vita menüsü, oynanış ve fiziksel cihaz başarısı doğrulanmadı. Linux touchHLE'de görülen gerçek menü ayrı bir referans çalışmasıdır.
 
 Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştirilmedi; o projenin deneysel sahnesi bu yükleyicinin oyun çalıştırma kanıtı sayılmaz.
 

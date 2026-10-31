@@ -136,5 +136,12 @@
   "production_arm_cf_runtime_calls": 118,
   "cf_array_and_memory_host_asan_ubsan_passed": true,
   "cf_array_rejection_cases": 11,
-  "containers_geometry_ci_success": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41149760652"
+  "containers_geometry_ci_success": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41149760652",
+  "latest_source_commit": "547d847b8923ff34a25c7d1887678f87a2ecbd64",
+  "latest_github_ci": {
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41228286858",
+    "job_started": false,
+    "tests_executed": false,
+    "reason": "GitHub account recent payment failure or spending limit; runner job was not started. Local verification passed; no CI success claimed."
+  }
 }

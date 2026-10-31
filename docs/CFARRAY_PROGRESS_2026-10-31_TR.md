@@ -34,3 +34,7 @@ Unicorn: tam bağlı Vita ARM ELF'inin **118 üretim CF/runtime çağrısı** ç
 ## Durum
 
 490 özgün importtan 283 ad eşleşiyor; **207 ad eksik**. Bu ad kapsamıdır; uygulama doğruluğu veya tamamlanma yüzdesi değildir. 25 kısmi/39 eksik harici framework sınıfı sayısı değişmedi. Native özgün boot, fiziksel Vita, grafik/ses/oynanış doğrulaması açık; SELF/VPK üretilmedi ve yürütme korumaları değiştirilmedi.
+
+## GitHub kontrolünün durumu
+
+Kaynak commit: `547d847b8923ff34a25c7d1887678f87a2ecbd64`. [Actions 41228286858](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41228286858) hiçbir adımı başlatmadan hesap ödeme/harcama limiti uyarısıyla durdu. Bu kod testi başarısızlığı değildir; yeni commit için CI başarı kanıtı da değildir. Yukarıdaki sonuçlar yerel managed ortamda alınmıştır. Hesap ayarları değiştirilmedi ve aynı engelde tekrar koşum başlatılmadı.
