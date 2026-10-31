@@ -106,3 +106,28 @@ for i in range(math_count):
     name,target,kind=struct.unpack('<3I',read(symbols['math_bridge_imports']+12*i,12))
     assert kind==0 and target==symbols['b_'+cstring(name)[1:]], cstring(name)
 print('PASS: 23 ARM math imports route to explicit base-AAPCS bridges')
+
+container_count=struct.unpack('<I',read(symbols['legacy_container_imports_count'],4))[0]
+assert container_count==8
+container_targets={}
+for i in range(container_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['legacy_container_imports']+12*i,12))
+    assert target and kind==0
+    container_targets[cstring(name)]=target
+assert len(container_targets)==8 and len(set(container_targets.values()))==8
+assert '__ZNSt15_List_node_base8transferEPS_S0_' in container_targets
+assert '__ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_' in container_targets
+print('PASS: eight legacy C++ node imports are linked function bridges')
+
+cg_count=struct.unpack('<I',read(symbols['cg_geometry_imports_count'],4))[0]
+assert cg_count==5
+cg_entries={}
+for i in range(cg_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['cg_geometry_imports']+12*i,12))
+    cg_entries[cstring(name)]=(target,kind)
+for name,size in (('_CGPointZero',8),('_CGRectZero',16)):
+    target,kind=cg_entries[name];assert kind==1 and read(target,size)==bytes(size)
+for name,target in (('_CGAffineTransformMakeRotation','cg_rotation'),
+                    ('_CGAffineTransformMakeScale','cg_scale'),('_CGRectOffset','cg_rect_offset')):
+    assert cg_entries[name]==(symbols[target],0)
+print('PASS: CoreGraphics zero globals are real data; three aggregate functions use geometry bridges')

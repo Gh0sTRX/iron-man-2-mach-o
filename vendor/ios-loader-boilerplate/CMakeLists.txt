@@ -26,7 +26,9 @@ add_library(im2_ios_loader_objects OBJECT
   source/macho.c
   source/macho_reloc.c
   source/macho_init.c
+  source/cg_geometry.c
   source/math_bridge.c
+  source/legacy_containers.cpp
   source/legacy_string.cpp
   source/imports.c
   source/darwin.c

@@ -136,3 +136,118 @@ for align in (0,4):
  near(calculate('atof',[TEXT],align=align),-12.5)
  assert math.copysign(1.,calculate('roundf',[0x80000000],True,align))==-1.
 print(f'PASS: {calls-math_start} production ARM math calls, both stack alignments, poisoned VFP args, r0/r1 double returns, out-pointers, NaN, signed zero, rounding and strtod end-pointer.')
+
+# Original ARM node layouts: list links +0/+4, tree color/parent/left/right
+# +0/+4/+8/+12. Payload belongs to the guest and must remain untouched.
+container_count=struct.unpack('<I',read(symbols['legacy_container_imports_count'],4))[0]
+assert container_count==8
+for i in range(container_count):
+ n,t,k=struct.unpack('<III',read(symbols['legacy_container_imports']+12*i,12));entries[cstring(n)]=(t,k)
+container_start=calls
+LIST_HOOK='ZNSt15_List_node_base4hookEPS_'
+LIST_UNHOOK='ZNSt15_List_node_base6unhookEv'
+LIST_TRANSFER='ZNSt15_List_node_base8transferEPS_S0_'
+INSERT='ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_'
+ERASE='ZSt28_Rb_tree_rebalance_for_erasePSt18_Rb_tree_node_baseRS_'
+NEXT='ZSt18_Rb_tree_incrementPSt18_Rb_tree_node_base'
+NEXTC='ZSt18_Rb_tree_incrementPKSt18_Rb_tree_node_base'
+PREV='ZSt18_Rb_tree_decrementPSt18_Rb_tree_node_base'
+GUARD=0xa57ead01
+
+def put(p,*v):u.mem_write(p,struct.pack('<'+'I'*len(v),*v))
+def get(p,n):return struct.unpack('<'+'I'*n,u.mem_read(p,4*n))
+
+def ring(h,expected):
+ current=pointer(h);previous=h;seen=[]
+ while current!=h:
+  assert current not in seen and len(seen)<=4
+  assert pointer(current+4)==previous
+  seen.append(current);previous=current;current=pointer(current)
+ assert pointer(h+4)==previous and seen==expected
+
+def check_tree(h,present,nodes):
+ color,root,left,right=get(h,4);assert color==0
+ seen=set();ordered=[]
+ def walk(p,parent):
+  if not p:return 1
+  assert p in nodes and p not in seen;seen.add(p)
+  c,up,lo,hi,key,guard=get(p,6);assert up==parent and c in (0,1) and guard==GUARD
+  assert key==nodes.index(p)
+  if c==0:
+   assert not lo or pointer(lo)==1
+   assert not hi or pointer(hi)==1
+  lh=walk(lo,p);ordered.append(key);rh=walk(hi,p);assert lh==rh
+  return lh+(c==1)
+ if root:assert pointer(root)==1
+ walk(root,h);assert ordered==sorted(present)
+ if present:assert left==nodes[min(present)] and right==nodes[max(present)]
+ else:assert root==0 and left==h and right==h
+ for key,p in enumerate(nodes):assert get(p+16,4)==(key,GUARD,GUARD,GUARD)
+
+import random
+for align in (0,4):
+ L=OBJECT+0x3000;H=L;J=L+32;nodes=[L+64+i*32 for i in range(4)]
+ for p in [H,J,*nodes]:put(p,p,p,GUARD,GUARD)
+ for p in nodes:call(LIST_HOOK,[p,H],align)
+ ring(H,nodes);call(LIST_UNHOOK,[nodes[1]],align);ring(H,[nodes[0],nodes[2],nodes[3]])
+ call(LIST_TRANSFER,[J,nodes[2],H],align);ring(H,[nodes[0]]);ring(J,nodes[2:])
+ call(LIST_TRANSFER,[H,J,J],align);ring(H,[nodes[0]]);ring(J,nodes[2:])
+ call(LIST_TRANSFER,[H,pointer(J),J],align);ring(H,[nodes[0],nodes[2],nodes[3]]);ring(J,[])
+ call(LIST_TRANSFER,[H,pointer(H),H],align);ring(H,[nodes[0],nodes[2],nodes[3]])
+ for p in [H,J,*nodes]:assert get(p+8,2)==(GUARD,GUARD)
+ H=OBJECT+0x4000;nodes=[H+32+i*32 for i in range(31)]
+ for key,p in enumerate(nodes):put(p,0,0,0,0,key,GUARD,GUARD,GUARD)
+ rng=random.Random(0x1a02+align);keys=list(range(len(nodes)))
+ for deletion in ('ascending','descending','random'):
+  put(H,0,0,H,H);present=set();rng.shuffle(keys)
+  for key in keys:
+   parent=H;p=pointer(H+4);left=1
+   while p:
+    parent=p;left=int(key<pointer(p+16));p=pointer(p+(8 if left else 12))
+   call(INSERT,[0x100|left,nodes[key],parent,H],align);present.add(key);check_tree(H,present,nodes)
+  p=pointer(H+8)
+  for key in range(len(nodes)):
+   assert p==nodes[key]
+   nxt=call(NEXT,[p],align);assert nxt==call(NEXTC,[p],align);p=nxt
+  assert p==H;p=call(PREV,[H],align)
+  for key in reversed(range(len(nodes))):
+   assert p==nodes[key]
+   if key:p=call(PREV,[p],align)
+  order=sorted(present,reverse=deletion=='descending')
+  if deletion=='random':rng.shuffle(order)
+  for key in order:
+   assert call(ERASE,[nodes[key],H],align)==nodes[key]
+   present.remove(key);check_tree(H,present,nodes)
+print(f'PASS: {calls-container_start} production ARM container calls; 8/16-byte nodes, splice, red/black invariants, payload preservation, sorted/const/reverse iteration and one-byte bool normalization at both stack alignments.')
+
+cg_count=struct.unpack('<I',read(symbols['cg_geometry_imports_count'],4))[0]
+assert cg_count==5
+for i in range(cg_count):
+ n,t,k=struct.unpack('<III',read(symbols['cg_geometry_imports']+12*i,12));entries[cstring(n)]=(t,k)
+cg_start=calls
+OUT=OBJECT+0x6000
+for align in (0,4):
+ for angle in (0.,math.pi/2,-math.pi/2,math.pi):
+  put(OUT-4,GUARD,*([GUARD]*6),GUARD)
+  for reg in (UC_ARM_REG_S0,UC_ARM_REG_S1,UC_ARM_REG_S2,UC_ARM_REG_S3):u.reg_write(reg,0x7fc00000)
+  call('_CGAffineTransformMakeRotation',[OUT,float_word(angle)],align)
+  result=struct.unpack('<6f',u.mem_read(OUT,24))
+  for actual,expected in zip(result,(math.cos(angle),math.sin(angle),-math.sin(angle),math.cos(angle),0.,0.)):
+   near(actual,expected,True)
+  assert pointer(OUT-4)==GUARD and pointer(OUT+24)==GUARD
+ for x,y in ((2.,3.),(-2.,.5),(0.,-1.)):
+  put(OUT-4,GUARD,*([GUARD]*6),GUARD)
+  for reg in (UC_ARM_REG_S0,UC_ARM_REG_S1,UC_ARM_REG_S2,UC_ARM_REG_S3):u.reg_write(reg,0x7fc00000)
+  call('_CGAffineTransformMakeScale',[OUT,float_word(x),float_word(y)],align)
+  assert struct.unpack('<6f',u.mem_read(OUT,24))==(x,0.,0.,y,0.,0.)
+  assert pointer(OUT-4)==GUARD and pointer(OUT+24)==GUARD
+ for rect,dx,dy in (((10.,20.,300.,400.),-5.,2.),((-10.,-20.,0.,-8.),.5,-1.5)):
+  put(OUT-4,GUARD,*([GUARD]*4),GUARD)
+  for reg in (UC_ARM_REG_S0,UC_ARM_REG_S1,UC_ARM_REG_S2,UC_ARM_REG_S3):u.reg_write(reg,0x7fc00000)
+  args=[OUT]+[float_word(x) for x in (*rect,dx,dy)]
+  call('_CGRectOffset',args,align)
+  assert struct.unpack('<4f',u.mem_read(OUT,16))==(rect[0]+dx,rect[1]+dy,rect[2],rect[3])
+  assert pointer(OUT-4)==GUARD and pointer(OUT+16)==GUARD
+ for name,size in (('_CGPointZero',8),('_CGRectZero',16)):
+  address,kind=entries[name];assert kind==1 and bytes(u.mem_read(address,size))==bytes(size)
+print(f'PASS: {calls-cg_start} production CoreGraphics ARM aggregate calls; hidden outputs, split rectangle args, poisoned VFP args, rotation/scale/offset and bounds guards, both stack alignments; no GPU/view transform claim.')
