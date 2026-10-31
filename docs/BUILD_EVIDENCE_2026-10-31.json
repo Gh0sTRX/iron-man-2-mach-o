@@ -186,5 +186,12 @@
     "job_started": false,
     "tests_executed": false,
     "reason": "GitHub account recent payment failure or spending limit; runner job was not started. Local verification passed; no CI success claimed."
+  },
+  "latest_source_commit": "87d26a99500b66fe68a15a17c171725279067661",
+  "latest_github_ci": {
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41235453412",
+    "job_started": false,
+    "tests_executed": false,
+    "reason": "GitHub account recent payment failure or spending limit; runner job was not started. Local verification passed; no CI success claimed."
   }
 }

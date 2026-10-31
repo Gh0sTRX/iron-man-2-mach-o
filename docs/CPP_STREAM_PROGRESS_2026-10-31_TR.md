@@ -34,3 +34,7 @@ Fixture pthread_once için yalnız başarı döndürmez: gerçek SDK initializer
 ## Durum
 
 490 özgün importtan **332 ad eşleşir, 158 ad eksiktir**. Bu isim kapsamıdır, tamamlanma yüzdesi değildir. Özgün constructor/main/AppController zinciri henüz native Vita loader'da çalıştırılmadı. Genel exception/SjLj/RTTI, diğer C/POSIX, framework, dosya/thread ve ses boşlukları sürer. SELF/VPK oluşturulmadı; yürütme/release korumaları korunur.
+
+## GitHub CI
+
+Kaynak `87d26a99500b66fe68a15a17c171725279067661`, [Actions 41235453412](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41235453412): hesap ödeme/harcama limiti uyarısıyla job başlamadı, test adımı çalışmadı. Yerel doğrulamalar geçmiştir; yeni kaynak için CI başarısı iddia edilmez. Hesap ayarları değiştirilmedi ve engelli job yeniden başlatılmadı.
