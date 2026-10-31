@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "macho_sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "elf_sha256": "29be3b5d53bed8fa2f44cc407bef20300ab98e03aa1be502fc46d33f49f48ae2",
+  "preflight": {
+    "arch": "ARM",
+    "cpu_subtype": 6,
+    "mach_o_size": 7480208,
+    "load_commands": 26,
+    "text_vm": "0x1000",
+    "data_vm": "0x4b9000",
+    "image_vm_span": 5222400,
+    "undefined_imports": 490,
+    "rbs1_relocations": 33267,
+    "local_indirect_slots": 401,
+    "external_indirect_slots": 906,
+    "external_relocations": 5225,
+    "rbs1_external_relocation_overlap": 0,
+    "local_slots_all_relocated": true,
+    "external_slots_not_relocated": true
+  },
+  "slide": 0,
+  "diagnostic_only": true,
+  "production_loader_execution": false,
+  "main_called": false,
+  "physical_vita_verified": false,
+  "gpu_verified": false,
+  "os_heap_mutex_gpu_services": "regression fixture, not native OS",
+  "constructors_available": 297,
+  "constructors_returned": 297,
+  "registered_exit_callbacks": 359,
+  "exit_callbacks_entered": 359,
+  "pending_exit_callbacks_after_drain": 0,
+  "exit_callbacks_drained": true,
+  "external_relocations_applied": 5225,
+  "external_indirect_slots_applied": 906,
+  "owner_code_executed_in_emulator": true,
+  "exception_unwinding_verified": false,
+  "status": "all_constructors_returned",
+  "unbound_symbols_in_fixture_count": 187,
+  "fixture_class_binding_note": "Fixture does not call full objc_init; unbound class names are not an implementation audit.",
+  "actual_import_calls_by_phase": {
+    "constructors": {
+      "__Unwind_SjLj_Register": 3,
+      "__Unwind_SjLj_Unregister": 3,
+      "__ZNSsC1EPKcRKSaIcE": 81,
+      "__ZNSt8ios_base4InitC1Ev": 2,
+      "__ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_": 20,
+      "___cxa_atexit": 359,
+      "_cosf": 1,
+      "_malloc": 40,
+      "_memset": 58,
+      "_sinf": 1,
+      "_strcpy": 36
+    },
+    "exit_callbacks": {
+      "__Unwind_SjLj_Register": 1,
+      "__Unwind_SjLj_Unregister": 1,
+      "__ZNSsD2Ev": 81,
+      "__ZNSt8ios_base4InitD1Ev": 2,
+      "_free": 20
+    }
+  },
+  "limits": [
+    "Only original static constructors and their registered cleanup were executed, not main, menu or gameplay.",
+    "No production missing-import gate, RX/cache gate or VPK release gate was bypassed.",
+    "Zero-slide diagnostic validates the private RBS1, but does not exercise nonzero relocation or Vita RX/cache.",
+    "SjLj Register/Unregister normal-path placeholders were reached; exception throwing/unwinding is NOT verified.",
+    "Unbound imports are trap tokens; no unbound token was accessed in this measured path.",
+    "This is Unicorn ARM execution against the VitaSDK ELF with modeled OS services, not physical Vita execution."
+  ],
+  "source_commit": "1c1b8309a6ec663439a1ff499e18b6066a4f2f24",
+  "github_ci": {
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41241376939",
+    "tests_executed": false,
+    "reason": "Job not started: GitHub account payment/spending limit"
+  }
+}

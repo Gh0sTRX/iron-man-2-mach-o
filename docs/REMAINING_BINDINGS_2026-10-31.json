@@ -1,8 +1,8 @@
 {
   "original_imports": 490,
-  "loader_table_names": 447,
-  "matched_original_imports": 337,
-  "unresolved_original_imports": 153,
+  "loader_table_names": 448,
+  "matched_original_imports": 338,
+  "unresolved_original_imports": 152,
   "unresolved_symbols": [
     "_CC_MD5",
     "_CFRunLoopRunInMode",
@@ -97,7 +97,6 @@
     "___toupper",
     "__objc_empty_cache",
     "__objc_empty_vtable",
-    "_atexit",
     "_chdir",
     "_clearerr",
     "_clock",
