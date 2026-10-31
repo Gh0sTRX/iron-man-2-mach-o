@@ -40,3 +40,7 @@ Test gerçek köprü kodunu çalıştırır, **VitaGL girişlerinde çağrılar�
 490 importtan 302 ad eşleşir; **188 ad eksik**. Bu ad kapsamıdır, tamamlanma yüzdesi değildir. GLES'te hâlâ color/normal array pointer, indexed draw, compressed texture, readback, state/string queries, hint ve tex-env float/vector/fixed çağrıları eksiktir. Client-array fixed dönüşümü ve blit/state restoration daha fazla çalışma ister. Framework/C++/sistem/ses boşlukları da sürer.
 
 Özgün native açılış ve fiziksel Vita doğrulanmadı. Yürütme/paketleme korumaları değiştirilmedi; SELF veya VPK yok.
+
+## GitHub CI
+
+Kaynak commit `3dd18636160af234348dee98cb218558545c916e`, [Actions 41230008835](https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41230008835): hesap ödeme/harcama limiti uyarısı nedeniyle job başlamadı; hiçbir test adımı çalışmadı. Yeni kaynak için CI başarısı iddia edilmez. Bu rapordaki doğrulamalar yerel managed ortam sonuçlarıdır; hesap ayarları değiştirilmedi ve engelli job yeniden başlatılmadı.
