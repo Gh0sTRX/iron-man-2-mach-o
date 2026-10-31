@@ -87,3 +87,15 @@ assert set(cf)=={'_CFBundleGetMainBundle','_CFBundleCopyBundleURL',
 assert all(target and kind==0 for target,kind in cf.values())
 assert cf['_CFBundleCopyBundleURL']==cf['_CFBundleCopyResourcesDirectoryURL']
 print('PASS: linked CFBundle/CFURL imports are real function entries with flat iOS resource-root alias')
+
+legacy_count=struct.unpack('<I',read(symbols['legacy_string_imports_count'],4))[0]
+assert legacy_count==24
+legacy={}
+for i in range(legacy_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['legacy_string_imports']+12*i,12))
+    legacy[cstring(name)]=(target,kind)
+empty='__ZNSs4_Rep20_S_empty_rep_storageE'
+assert legacy[empty]==(symbols['_ZNSs4_Rep20_S_empty_rep_storageE'],1)
+assert all(target and kind==0 for name,(target,kind) in legacy.items() if name!=empty)
+assert '__ZNKSs6substrEmm' in legacy and '__ZNSs6insertEmRKSsmm' in legacy
+print('PASS: 23 ARM C++ function bindings and actual SDK empty-rep DATA symbol')

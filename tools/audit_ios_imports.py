@@ -14,7 +14,7 @@ import sys
 
 def table_names(source_dir):
     provided=set()
-    for path in source_dir.glob("*.c"):
+    for path in sorted([*source_dir.glob("*.c"), *source_dir.glob("*.cpp")]):
         data=path.read_text(encoding="utf8",errors="replace")
         data=re.sub(r"/\*.*?\*/","",data,flags=re.S)
         data=re.sub(r"//[^\n]*","",data)

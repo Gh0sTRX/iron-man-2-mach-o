@@ -23,6 +23,9 @@ typedef struct {
  */
 const import_entry *imports_lookup(const char *name);
 
+extern const import_entry legacy_string_imports[];
+extern const int legacy_string_imports_count;
+
 // Modular subsystem symbol tables
 extern const import_entry darwin_imports[];
 extern const int darwin_imports_count;

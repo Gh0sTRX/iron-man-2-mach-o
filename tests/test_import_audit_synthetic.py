@@ -28,7 +28,9 @@ static void bind_class_imports(void) {
     class_imports[1]=(import_entry){"___CFConstantStringClassReference",string_class,IM2_IMPORT_DATA};
 }
 ''')
+    (src/"legacy.cpp").write_text("const import_entry legacy_imports[] = { F(_ZNSsD2Ev,destroy) };")
     have=audit.table_names(src)
+    assert "__ZNSsD2Ev" in have
     assert "_malloc" in have
     assert "_glBindTexture" in have
     assert "___stderrp" in have
@@ -38,7 +40,7 @@ static void bind_class_imports(void) {
     assert "_objc_msgSend" in have
     assert "_OBJC_CLASS_$_NSData" in have and "_OBJC_METACLASS_$_NSData" in have
     assert "___CFConstantStringClassReference" in have
-    assert len(have)==8,have
+    assert len(have)==9,have
     expected=src/"original.json"
     expected.write_text('{"dynamic_imports":["_malloc","_glBindTexture","_missing"]}')
     requested=audit.original_names(expected)

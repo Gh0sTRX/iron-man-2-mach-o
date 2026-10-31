@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(im2_ios_loader_objects LANGUAGES C ASM)
+project(im2_ios_loader_objects LANGUAGES C CXX ASM)
 
 # Compile-only target: no ELF/SELF/VPK is produced.
 # Configure with: cmake -S vendor/ios-loader-boilerplate -B build/loader-objects
@@ -26,6 +26,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/macho.c
   source/macho_reloc.c
   source/macho_init.c
+  source/legacy_string.cpp
   source/imports.c
   source/darwin.c
   source/objc.c

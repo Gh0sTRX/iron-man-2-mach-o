@@ -190,3 +190,8 @@ for test in sets touches; do
     vendor/ios-loader-boilerplate/source/objc_runtime.c -lm -o "build/host-runtime/test_${test}"
   "build/host-runtime/test_${test}"
 done
+
+c++ -std=c++11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I vendor/ios-loader-boilerplate/source tests/test_legacy_string.cpp \
+  vendor/ios-loader-boilerplate/source/legacy_string.cpp -o build/host-runtime/test_legacy_string
+build/host-runtime/test_legacy_string
