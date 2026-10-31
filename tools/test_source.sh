@@ -200,3 +200,11 @@ c++ -std=c++11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-f
   -I vendor/ios-loader-boilerplate/source tests/test_legacy_containers.cpp \
   vendor/ios-loader-boilerplate/source/legacy_containers.cpp -o build/host-runtime/test_legacy_containers
 build/host-runtime/test_legacy_containers
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_cfarrays.c \
+  vendor/ios-loader-boilerplate/source/cfarrays.c vendor/ios-loader-boilerplate/source/cf_memory.c \
+  vendor/ios-loader-boilerplate/source/imports.c vendor/ios-loader-boilerplate/source/foundation.c \
+  vendor/ios-loader-boilerplate/source/url.c vendor/ios-loader-boilerplate/source/cfstring.c \
+  vendor/ios-loader-boilerplate/source/objc_runtime.c -o build/host-runtime/test_cfarrays
+build/host-runtime/test_cfarrays

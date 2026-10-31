@@ -19,6 +19,7 @@
 #include "objc.h"
 #include "foundation.h"
 #include "collections.h"
+#include "cfarrays.h"
 #include "url.h"
 #include "url_request.h"
 #include "file_manager.h"
@@ -423,6 +424,7 @@ void objc_init(void) {
     const Im2FoundationConfig foundation={BUNDLE_PATH,(Im2Imp)string_format,foundation_failure,darwin_path};
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
     if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
+    if(im2_cfarrays_init(root))fatal_error("CFArray registration failed");
     if(im2_numbers_init(root))fatal_error("NSNumber registration failed");
     if(im2_sets_init(root))fatal_error("NSSet registration failed");
     _Static_assert(SCE_SYSTEM_PARAM_LANG_ENGLISH_US==1 && SCE_SYSTEM_PARAM_LANG_PORTUGUESE_BR==17 && SCE_SYSTEM_PARAM_LANG_ENGLISH_GB==18 && SCE_SYSTEM_PARAM_LANG_TURKISH==19,"Vita language enumeration changed");
@@ -458,13 +460,6 @@ static uint32_t cf_string_get_cstring(void *string,char *buffer,int32_t capacity
     if(capacity<=0)return 0;
     uint32_t nsencoding=encoding==0x08000100u?IM2_NS_UTF8:encoding==0x0600u?IM2_NS_ASCII:0;
     return nsencoding && im2_string_get_cstring(string,buffer,(size_t)capacity,nsencoding)==0;
-}
-static void cf_release(void *value) {
-    if(!value || im2_objc_release(value))fatal_error("CFRelease on unsupported object");
-}
-static void *cf_retain(void *value) {
-    if(!value || !im2_objc_retain(value))fatal_error("CFRetain on unsupported object");
-    return value;
 }
 static void *ns_class_from_string(void *string) {
     const char *name=im2_string_utf8(string);
@@ -515,7 +510,7 @@ static void enumeration_mutation(void *object) {
 #define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
 
 const import_entry objc_imports[] = {
-    F(CFStringGetCString, cf_string_get_cstring),F(CFRelease, cf_release),F(CFRetain, cf_retain),
+    F(CFStringGetCString, cf_string_get_cstring),
     F(NSClassFromString, ns_class_from_string),F(objc_enumerationMutation, enumeration_mutation),
     F(UIApplicationMain, ui_application_main),
     F_ABI(objc_msgSend, im2_objc_msgSend_entry), F_ABI(objc_msgSend_stret, im2_objc_msgSend_stret_entry),

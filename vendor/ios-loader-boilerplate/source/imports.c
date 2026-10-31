@@ -21,6 +21,8 @@ static const struct {
     {coreaudio_imports, &coreaudio_imports_count},
     {objc_imports, &objc_imports_count},
     {eagl_imports, &eagl_imports_count},
+    {cf_memory_imports, &cf_memory_imports_count},
+    {cfarray_imports, &cfarray_imports_count},
     {cfbundle_imports, &cfbundle_imports_count},
 };
 

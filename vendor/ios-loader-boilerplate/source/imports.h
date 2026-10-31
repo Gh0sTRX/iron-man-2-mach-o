@@ -54,6 +54,12 @@ extern const int eagl_imports_count;
 extern const import_entry patch_imports[];
 extern const int patch_imports_count;
 
+extern const import_entry cf_memory_imports[];
+extern const int cf_memory_imports_count;
+
+extern const import_entry cfarray_imports[];
+extern const int cfarray_imports_count;
+
 extern const import_entry cfbundle_imports[];
 extern const int cfbundle_imports_count;
 

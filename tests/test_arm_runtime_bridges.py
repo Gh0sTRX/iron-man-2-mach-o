@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Execute production C++/math bridges and linked SDK runtime in ARM Unicorn.
 Heap, Vita Clib memory primitives and single-thread errno/reent storage use
-bounded fixtures; OS TLS is not exercised. No Vita/game execution proof.
+bounded fixtures; OS TLS and mutex scheduling are not exercised. No Vita/game execution proof.
 """
 import argparse, struct, runpy, math
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE, UC_HOOK_MEM_INVALID
@@ -20,16 +20,37 @@ for base,size in ((STACK,0x10000),(HEAP,0x100000),(OBJECT,0x10000),(STOP,0x1000)
 u.reg_write(UC_ARM_REG_C1_C0_2,0x00f00000);u.reg_write(UC_ARM_REG_FPEXC,0x40000000)
 next_alloc=HEAP;live={};calls=0
 
-def hook(uc,addr,size,_):
+def allocate(n):
  global next_alloc
- if addr==(symbols['_Znwj']&~1):
-  n=uc.reg_read(UC_ARM_REG_R0);assert 0<n<0x10000
-  ptr=next_alloc;next_alloc+=(n+15)&~15;assert next_alloc<HEAP+0x100000
-  live[ptr]=n;uc.reg_write(UC_ARM_REG_R0,ptr);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
- elif addr==(symbols['_ZdlPv']&~1):
-  ptr=uc.reg_read(UC_ARM_REG_R0)
-  if ptr:assert ptr in live;del live[ptr]
+ assert 0<=n<0x10000
+ n=max(n,1);ptr=next_alloc;next_alloc+=(n+15)&~15;assert next_alloc<HEAP+0x100000
+ live[ptr]=n;u.mem_write(ptr,bytes(n));return ptr
+
+def hook(uc,addr,size,_):
+ def matches(*names):return any(addr==(symbols[n]&~1) for n in names if n in symbols)
+ def arg(n):return uc.reg_read((UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2)[n])
+ def returned(value=None):
+  if value is not None:uc.reg_write(UC_ARM_REG_R0,value)
   uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+ if matches('_Znwj','malloc','_malloc_r','calloc','_calloc_r'):
+  if matches('calloc'):n=arg(0)*arg(1)
+  elif matches('_calloc_r'):n=arg(1)*arg(2)
+  else:n=arg(1 if matches('_malloc_r') else 0)
+  returned(allocate(n))
+ elif matches('realloc','_realloc_r'):
+  offset=int(matches('_realloc_r'));ptr=arg(offset);n=arg(offset+1)
+  result=allocate(n)
+  if ptr:
+   assert ptr in live
+   uc.mem_write(result,bytes(uc.mem_read(ptr,min(live[ptr],n))))
+   del live[ptr]
+  returned(result)
+ elif matches('_ZdlPv','free','_free_r'):
+  ptr=arg(int(matches('_free_r')))
+  if ptr:assert ptr in live;del live[ptr]
+  returned()
+ elif matches('pthread_mutex_lock','pthread_mutex_unlock'):
+  returned(0) # Single-thread fixture: no OS mutex/scheduling coverage.
  elif addr in {symbols[n]&~1 for n in ('memcpy','memmove','memset')} :
   dst=uc.reg_read(UC_ARM_REG_R0);src=uc.reg_read(UC_ARM_REG_R1);n=uc.reg_read(UC_ARM_REG_R2)
   assert n<0x10000
@@ -251,3 +272,37 @@ for align in (0,4):
  for name,size in (('_CGPointZero',8),('_CGRectZero',16)):
   address,kind=entries[name];assert kind==1 and bytes(u.mem_read(address,size))==bytes(size)
 print(f'PASS: {calls-cg_start} production CoreGraphics ARM aggregate calls; hidden outputs, split rectangle args, poisoned VFP args, rotation/scale/offset and bounds guards, both stack alignments; no GPU/view transform claim.')
+
+# Real ARM CF-array + managed-runtime integration. Only allocator/memory/OS
+# synchronization primitives above are substituted; class/object/CF code is real.
+for table in ('cfarray_imports','cf_memory_imports'):
+ n=struct.unpack('<I',read(symbols[table+'_count'],4))[0]
+ for i in range(n):
+  name,t,k=struct.unpack('<III',read(symbols[table]+12*i,12));entries[cstring(name)]=(t,k)
+for name in ('im2_objc_register_class','im2_cfarrays_init','im2_objc_alloc','im2_objc_retain_count'):
+ entries['__'+name]=(symbols[name],0)
+cf_start=calls
+u.mem_write(TEXT,b'NSObject\0')
+root=call('im2_objc_register_class',[TEXT,0,4,0,0,0,0]);assert root
+assert call('im2_cfarrays_init',[root])==0
+registry_heap=dict(live)
+for align in (0,4):
+ default,kind=entries['_kCFAllocatorDefault'];assert kind==1 and pointer(default)==0
+ a=call('_CFArrayCreateMutable',[pointer(default),0,0],align);assert a
+ assert call('_CFArrayGetCount',[a],align)==0
+ assert call('im2_objc_retain_count',[a],align)==1
+ value=call('im2_objc_alloc',[root,0],align);assert value
+ call('_CFArrayAppendValue',[a,value],align);call('_CFArrayAppendValue',[a,value],align)
+ assert call('im2_objc_retain_count',[value],align)==1
+ assert call('_CFArrayGetValueAtIndex',[a,0],align)==value
+ assert call('_CFArrayGetValueAtIndex',[a,1],align)==value
+ call('_CFRelease',[value],align);assert call('im2_objc_retain_count',[value],align)==0
+ call('_CFArrayRemoveAllValues',[a],align) # old pointers are dangling, not released
+ for v in range(20):call('_CFArrayAppendValue',[a,0xdead0000+v],align)
+ assert call('_CFArrayGetCount',[a],align)==20
+ for v in range(20):assert call('_CFArrayGetValueAtIndex',[a,v],align)==0xdead0000+v
+ assert call('_CFRetain',[a],align)==a
+ call('_CFRelease',[a],align);assert call('im2_objc_retain_count',[a],align)==1
+ call('_CFRelease',[a],align);assert call('im2_objc_retain_count',[a],align)==0
+ assert live==registry_heap, (live,registry_heap)
+print(f'PASS: {calls-cf_start} production ARM CF/runtime calls, real class registration and object lifetime; borrowed duplicate/dangling/raw values, growth, Create/Get rules, shared retain/release and complete object/array heap cleanup. OS locks/allocators are fixtures.')

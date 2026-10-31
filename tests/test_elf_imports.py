@@ -41,7 +41,7 @@ for name in ('objc_msgSend','objc_msgSend_stret','objc_msgSendSuper2','objc_msgS
     target,kind=entries['_'+name]
     assert kind==2, (name,'assembly dispatcher must bypass generic stack-copy thunk')
     assert target==symbols['im2_'+name+'_entry']
-for name in ('objc_getClass','CFStringGetCString','CFRelease','CFRetain','NSClassFromString','objc_enumerationMutation'):
+for name in ('objc_getClass','CFStringGetCString','NSClassFromString','objc_enumerationMutation'):
     target,kind=entries['_'+name]
     assert target and kind==0, (name,'C bridges must use the ABI thunk')
 assert '_UIApplicationMain' in entries
@@ -131,3 +131,22 @@ for name,target in (('_CGAffineTransformMakeRotation','cg_rotation'),
                     ('_CGAffineTransformMakeScale','cg_scale'),('_CGRectOffset','cg_rect_offset')):
     assert cg_entries[name]==(symbols[target],0)
 print('PASS: CoreGraphics zero globals are real data; three aggregate functions use geometry bridges')
+
+cf_memory_count=struct.unpack('<I',read(symbols['cf_memory_imports_count'],4))[0]
+assert cf_memory_count==2
+cf_memory={}
+for i in range(cf_memory_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['cf_memory_imports']+12*i,12))
+    cf_memory[cstring(name)]=(target,kind)
+assert cf_memory=={'_CFRelease':(symbols['cf_release'],0),'_CFRetain':(symbols['cf_retain'],0)}
+cf_array_count=struct.unpack('<I',read(symbols['cfarray_imports_count'],4))[0]
+assert cf_array_count==6
+cf_array={}
+for i in range(cf_array_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['cfarray_imports']+12*i,12))
+    cf_array[cstring(name)]=(target,kind)
+assert set(cf_array)=={'_CFArrayCreateMutable','_CFArrayAppendValue','_CFArrayGetCount',
+                      '_CFArrayGetValueAtIndex','_CFArrayRemoveAllValues','_kCFAllocatorDefault'}
+target,kind=cf_array['_kCFAllocatorDefault'];assert kind==1 and read(target,4)==bytes(4)
+assert all(target and kind==0 for name,(target,kind) in cf_array.items() if name!='_kCFAllocatorDefault')
+print('PASS: CF array function imports, real default-allocator data and shared managed CF lifetime imports')

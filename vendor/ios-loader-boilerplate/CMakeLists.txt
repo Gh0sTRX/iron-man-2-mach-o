@@ -46,6 +46,8 @@ add_library(im2_ios_loader_objects OBJECT
   source/timers.c
   source/numbers.c
   source/defaults.c
+  source/cf_memory.c
+  source/cfarrays.c
   source/cfbundle.c
   source/sets.c
   source/touches.c
