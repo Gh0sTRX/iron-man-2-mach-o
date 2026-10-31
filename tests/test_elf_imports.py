@@ -150,3 +150,20 @@ assert set(cf_array)=={'_CFArrayCreateMutable','_CFArrayAppendValue','_CFArrayGe
 target,kind=cf_array['_kCFAllocatorDefault'];assert kind==1 and read(target,4)==bytes(4)
 assert all(target and kind==0 for name,(target,kind) in cf_array.items() if name!='_kCFAllocatorDefault')
 print('PASS: CF array function imports, real default-allocator data and shared managed CF lifetime imports')
+
+gf_count=struct.unpack('<I',read(symbols['gles_float_imports_count'],4))[0]
+assert gf_count==19
+gf_entries={}
+for i in range(gf_count):
+    name,target,kind=struct.unpack('<3I',read(symbols['gles_float_imports']+12*i,12))
+    gf_entries[cstring(name)]=(target,kind)
+for name,bridge in {'glAlphaFunc':'gf_alpha','glClearColor':'gf_clear','glClearDepthf':'gf_depth',
+                    'glDepthRangef':'gf_range','glFogf':'gf_fog','glFrustumf':'gf_frustum',
+                    'glOrthof':'gf_ortho','glRotatef':'gf_rotate','glScalef':'gf_scale',
+                    'glTranslatef':'gf_translate','glMaterialf':'gf_material',
+                    'glLightf':'gf_light_scalar','glLightfv':'gf_light_vector'}.items():
+    assert gf_entries['_'+name]==(symbols[bridge],0)
+for name in ('glFogfv','glLightModelfv','glLoadMatrixf','glMaterialfv','glMultMatrixf','glClearColorx'):
+    assert gf_entries['_'+name]==(symbols[name],0)
+assert '_glGetLightxv' not in gles_entries,'Unsupported old zero-filled light query must not be advertised'
+print('PASS: 19 GLES state imports use explicit scalar ABI bridges or pointer/integer-safe backend entries; light validation bridge and no fake light getter')

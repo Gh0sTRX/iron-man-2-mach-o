@@ -25,3 +25,6 @@ uint32_t gles_get_draw_calls(void);
 int gles_eagl_ready(void);
 int gles_eagl_storage(uint32_t renderbuffer_target,uint32_t color_format);
 int gles_eagl_present(uint32_t renderbuffer_target);
+
+/* Shared first-error slot for GLES compatibility bridges. */
+void gles_record_error(uint32_t error);

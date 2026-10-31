@@ -17,6 +17,7 @@ static const struct {
     {legacy_string_imports, &legacy_string_imports_count},
     {patch_imports, &patch_imports_count},
     {darwin_imports, &darwin_imports_count},
+    {gles_float_imports, &gles_float_imports_count},
     {gles_imports, &gles_imports_count},
     {coreaudio_imports, &coreaudio_imports_count},
     {objc_imports, &objc_imports_count},

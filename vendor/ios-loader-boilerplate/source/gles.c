@@ -6,7 +6,7 @@
  *          of the same size: viewport, scissor, and glCopyTexImage2D remain in iOS coordinate space untouched.
  *          During presentation (gles_present), the FBO is drawn rotated and scaled onto the native 960x544 screen.
  *
- *          All imported gl* functions take only integer/pointer arguments (*x variants): no SoftFP issues.
+ *          Integer/pointer imports share the base ABI; float state calls are in gles_float.c.
  *          GL_FIXED vertex arrays are converted to float immediately before draw calls.
  */
 #include <stdlib.h>
@@ -38,7 +38,7 @@ static GLuint fbo, fbo_tex;
 static int fbo_ready;
 static Im2Oes *oes;
 static GLenum oes_error;
-static void gles_error(GLenum e){if(e && !oes_error)oes_error=e;}
+void gles_record_error(uint32_t e){if(e && !oes_error)oes_error=e;}
 static GLenum g_glGetError(void){GLenum e=oes_error;if(e){oes_error=0;return e;}return glGetError();}
 
 // Cached state overwritten during blit that glGet cannot fully query:
@@ -171,7 +171,6 @@ static void g_glGetFixedv(GLenum pname, GLfixed *out) {
         out[i] = (GLfixed)(f[i] * 65536.0f);
 }
 
-static void g_glGetLightxv(GLenum light, GLenum pname, GLfixed *out) { memset(out, 0, 4 * sizeof(GLfixed)); }
 
 // ---------------------------------------------------------------- EAGLView framebuffer emulation
 
@@ -180,10 +179,10 @@ static void native_delete_fb(void *ctx,uint32_t id){(void)ctx;glDeleteFramebuffe
 static void native_bind_fb(void *ctx,uint32_t id){(void)ctx;glBindFramebuffer(GL_FRAMEBUFFER,id);}
 static uint32_t native_storage(void *ctx,uint32_t format,int width,int height){
     (void)ctx;GLuint id=0;GLint previous=0;
-    gles_error(glGetError());
+    gles_record_error(glGetError());
     if(format!=IM2_OES_DEPTH16){
         glGetIntegerv(GL_TEXTURE_BINDING_2D,&previous);
-        glGenTextures(1,&id);if(!id){gles_error(glGetError());return 0;}glBindTexture(GL_TEXTURE_2D,id);
+        glGenTextures(1,&id);if(!id){gles_record_error(glGetError());return 0;}glBindTexture(GL_TEXTURE_2D,id);
         GLenum pixel_format=format==IM2_OES_RGB565?GL_RGB:GL_RGBA;
         glTexImage2D(GL_TEXTURE_2D,0,pixel_format,width,height,0,pixel_format,format==IM2_OES_RGB565?GL_UNSIGNED_SHORT_5_6_5:GL_UNSIGNED_BYTE,NULL);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
@@ -191,33 +190,33 @@ static uint32_t native_storage(void *ctx,uint32_t format,int width,int height){
         glBindTexture(GL_TEXTURE_2D,(GLuint)previous);
     }else{
         glGetIntegerv(GL_RENDERBUFFER_BINDING,&previous);
-        glGenRenderbuffers(1,&id);if(!id){gles_error(glGetError());return 0;}glBindRenderbuffer(GL_RENDERBUFFER,id);
+        glGenRenderbuffers(1,&id);if(!id){gles_record_error(glGetError());return 0;}glBindRenderbuffer(GL_RENDERBUFFER,id);
         glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT16,width,height);
         glBindRenderbuffer(GL_RENDERBUFFER,(GLuint)previous);
     }
-    GLenum error=glGetError();if(error){gles_error(error);if(id){if(format!=IM2_OES_DEPTH16)glDeleteTextures(1,&id);else glDeleteRenderbuffers(1,&id);}return 0;}
+    GLenum error=glGetError();if(error){gles_record_error(error);if(id){if(format!=IM2_OES_DEPTH16)glDeleteTextures(1,&id);else glDeleteRenderbuffers(1,&id);}return 0;}
     return id;
 }
 static void native_delete_storage(void *ctx,uint32_t format,uint32_t id){(void)ctx;if(format!=IM2_OES_DEPTH16)glDeleteTextures(1,&id);else glDeleteRenderbuffers(1,&id);}
 static int native_attach(void *ctx,uint32_t fb,uint32_t attachment,uint32_t format,uint32_t id){
-    (void)ctx;gles_error(glGetError());glBindFramebuffer(GL_FRAMEBUFFER,fb);
+    (void)ctx;gles_record_error(glGetError());glBindFramebuffer(GL_FRAMEBUFFER,fb);
     if(format!=IM2_OES_DEPTH16)glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,id,0);
     else glFramebufferRenderbuffer(GL_FRAMEBUFFER,attachment,GL_RENDERBUFFER,id);
-    GLenum error=glGetError();gles_error(error);return !error;
+    GLenum error=glGetError();gles_record_error(error);return !error;
 }
 static uint32_t native_check(void *ctx,uint32_t fb){(void)ctx;glBindFramebuffer(GL_FRAMEBUFFER,fb);return glCheckFramebufferStatus(GL_FRAMEBUFFER);}
-static void g_glGenFramebuffersOES(GLsizei n,GLuint *ids){gles_error(im2_oes_gen(oes,IM2_OES_FB,n,ids));}
-static void g_glGenRenderbuffersOES(GLsizei n,GLuint *ids){gles_error(im2_oes_gen(oes,IM2_OES_RB,n,ids));}
-static void g_glBindFramebufferOES(GLenum target,GLuint id){gles_error(target==IM2_OES_FB?im2_oes_bind(oes,target,id):IM2_OES_ENUM);}
-static void g_glBindRenderbufferOES(GLenum target,GLuint id){gles_error(target==IM2_OES_RB?im2_oes_bind(oes,target,id):IM2_OES_ENUM);}
-static void g_glDeleteFramebuffersOES(GLsizei n,const GLuint *ids){gles_error(im2_oes_delete(oes,IM2_OES_FB,n,ids));}
-static void g_glDeleteRenderbuffersOES(GLsizei n,const GLuint *ids){gles_error(im2_oes_delete(oes,IM2_OES_RB,n,ids));}
-static void g_glRenderbufferStorageOES(GLenum target,GLenum format,GLsizei w,GLsizei h){gles_error(target==IM2_OES_RB?im2_oes_storage(oes,format,w,h):IM2_OES_ENUM);}
-static void g_glFramebufferRenderbufferOES(GLenum target,GLenum attachment,GLenum rbtarget,GLuint id){gles_error(target==IM2_OES_FB && rbtarget==IM2_OES_RB?im2_oes_attach(oes,attachment,id):IM2_OES_ENUM);}
-static GLenum g_glCheckFramebufferStatusOES(GLenum target){if(target!=IM2_OES_FB){gles_error(IM2_OES_ENUM);return 0;}return im2_oes_status(oes);}
-static void g_glGetRenderbufferParameterivOES(GLenum target,GLenum pname,GLint *value){gles_error(target==IM2_OES_RB?im2_oes_parameter(oes,pname,value):IM2_OES_ENUM);}
+static void g_glGenFramebuffersOES(GLsizei n,GLuint *ids){gles_record_error(im2_oes_gen(oes,IM2_OES_FB,n,ids));}
+static void g_glGenRenderbuffersOES(GLsizei n,GLuint *ids){gles_record_error(im2_oes_gen(oes,IM2_OES_RB,n,ids));}
+static void g_glBindFramebufferOES(GLenum target,GLuint id){gles_record_error(target==IM2_OES_FB?im2_oes_bind(oes,target,id):IM2_OES_ENUM);}
+static void g_glBindRenderbufferOES(GLenum target,GLuint id){gles_record_error(target==IM2_OES_RB?im2_oes_bind(oes,target,id):IM2_OES_ENUM);}
+static void g_glDeleteFramebuffersOES(GLsizei n,const GLuint *ids){gles_record_error(im2_oes_delete(oes,IM2_OES_FB,n,ids));}
+static void g_glDeleteRenderbuffersOES(GLsizei n,const GLuint *ids){gles_record_error(im2_oes_delete(oes,IM2_OES_RB,n,ids));}
+static void g_glRenderbufferStorageOES(GLenum target,GLenum format,GLsizei w,GLsizei h){gles_record_error(target==IM2_OES_RB?im2_oes_storage(oes,format,w,h):IM2_OES_ENUM);}
+static void g_glFramebufferRenderbufferOES(GLenum target,GLenum attachment,GLenum rbtarget,GLuint id){gles_record_error(target==IM2_OES_FB && rbtarget==IM2_OES_RB?im2_oes_attach(oes,attachment,id):IM2_OES_ENUM);}
+static GLenum g_glCheckFramebufferStatusOES(GLenum target){if(target!=IM2_OES_FB){gles_record_error(IM2_OES_ENUM);return 0;}return im2_oes_status(oes);}
+static void g_glGetRenderbufferParameterivOES(GLenum target,GLenum pname,GLint *value){gles_record_error(target==IM2_OES_RB?im2_oes_parameter(oes,pname,value):IM2_OES_ENUM);}
 static void g_glGetIntegerv(GLenum pname,GLint *value){
-    if(!value){gles_error(IM2_OES_VALUE);return;}
+    if(!value){gles_record_error(IM2_OES_VALUE);return;}
     if(pname==0x8CA6u)*value=(GLint)im2_oes_binding(oes,IM2_OES_FB);
     else if(pname==0x8CA7u)*value=(GLint)im2_oes_binding(oes,IM2_OES_RB);
     else glGetIntegerv(pname,value);
@@ -338,7 +337,7 @@ const import_entry gles_imports[] = {
     D(glRotatex), D(glScalex), D(glScissor), D(glShadeModel), D(glTexImage2D), D(glTexParameteri),
     D(glTexSubImage2D), D(glTranslatex), D(glViewport),
     F(glColor4x, g_glColor4x), F(glTexEnvi, g_glTexEnvi), F(glTexEnvxv, g_glTexEnvxv),
-    F(glTexParameterx, g_glTexParameterx), F(glGetFixedv, g_glGetFixedv), F(glGetLightxv, g_glGetLightxv),
+    F(glTexParameterx, g_glTexParameterx), F(glGetFixedv, g_glGetFixedv),
     F(glVertexPointer, g_glVertexPointer), F(glTexCoordPointer, g_glTexCoordPointer),
     F(glClientActiveTexture, g_glClientActiveTexture), F(glDrawArrays, g_glDrawArrays),
     F(glGetPointerv, g_glGetPointerv),

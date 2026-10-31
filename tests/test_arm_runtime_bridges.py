@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Execute production C++/math bridges and linked SDK runtime in ARM Unicorn.
 Heap, Vita Clib memory primitives and single-thread errno/reent storage use
-bounded fixtures; OS TLS and mutex scheduling are not exercised. No Vita/game execution proof.
+bounded fixtures; OS TLS and mutex scheduling are not exercised. GLES tests intercept VitaGL
+state entrypoints to check ABI forwarding, not GPU state or drawing. No Vita/game execution proof.
 """
 import argparse, struct, runpy, math
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE, UC_HOOK_MEM_INVALID
@@ -20,6 +21,8 @@ for base,size in ((STACK,0x10000),(HEAP,0x100000),(OBJECT,0x10000),(STOP,0x1000)
 u.reg_write(UC_ARM_REG_C1_C0_2,0x00f00000);u.reg_write(UC_ARM_REG_FPEXC,0x40000000)
 next_alloc=HEAP;live={};calls=0
 
+gles_capture={};gles_seen=[]
+
 def allocate(n):
  global next_alloc
  assert 0<=n<0x10000
@@ -32,7 +35,17 @@ def hook(uc,addr,size,_):
  def returned(value=None):
   if value is not None:uc.reg_write(UC_ARM_REG_R0,value)
   uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
- if matches('_Znwj','malloc','_malloc_r','calloc','_calloc_r'):
+ if addr in gles_capture:
+  name,ni,nf,vector=gles_capture[addr]
+  ints=tuple(uc.reg_read(r) for r in (UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3)[:ni])
+  floats=tuple(uc.reg_read(UC_ARM_REG_S0+i) for i in range(nf))
+  values=()
+  if vector:
+   pointer_arg,n=vector
+   if name=='glLightfv':n=1 if ints[1] in (0x1207,0x1208,0x1209) else 4
+   values=tuple(struct.unpack('<'+'I'*n,uc.mem_read(ints[pointer_arg],4*n)))
+  gles_seen.append((name,ints,floats,values));returned(0)
+ elif matches('_Znwj','malloc' ,'_malloc_r','calloc','_calloc_r'):
   if matches('calloc'):n=arg(0)*arg(1)
   elif matches('_calloc_r'):n=arg(1)*arg(2)
   else:n=arg(1 if matches('_malloc_r') else 0)
@@ -306,3 +319,79 @@ for align in (0,4):
  call('_CFRelease',[a],align);assert call('im2_objc_retain_count',[a],align)==0
  assert live==registry_heap, (live,registry_heap)
 print(f'PASS: {calls-cf_start} production ARM CF/runtime calls, real class registration and object lifetime; borrowed duplicate/dangling/raw values, growth, Create/Get rules, shared retain/release and complete object/array heap cleanup. OS locks/allocators are fixtures.')
+
+# Check production base-AAPCS wrappers at actual hard-float VitaGL boundaries.
+# The GPU implementation is deliberately not run; callbacks capture call values.
+gf_count=struct.unpack('<I',read(symbols['gles_float_imports_count'],4))[0]
+assert gf_count==19
+for table in ('gles_float_imports','gles_imports'):
+ n=struct.unpack('<I',read(symbols[table+'_count'],4))[0]
+ for i in range(n):
+  name,t,k=struct.unpack('<III',read(symbols[table]+12*i,12));entries[cstring(name)]=(t,k)
+for name,ni,nf,vec in (
+ ('glAlphaFunc',1,1,None),('glClearColor',0,4,None),('glClearDepthf',0,1,None),
+ ('glDepthRangef',0,2,None),('glFogf',1,1,None),('glFrustumf',0,6,None),('glOrthof',0,6,None),
+ ('glRotatef',0,4,None),('glScalef',0,3,None),('glTranslatef',0,3,None),
+ ('glMaterialf',2,1,None),('glLightfv',3,0,(2,4)),('glFogfv',2,0,(1,4)),
+ ('glLightModelfv',2,0,(1,4)),('glLoadMatrixf',1,0,(0,16)),
+ ('glMaterialfv',3,0,(2,4)),('glMultMatrixf',1,0,(0,16)),
+ ('glClearColorx',4,0,None),('glGetError',0,0,None)):
+ gles_capture[symbols[name]&~1]=(name,ni,nf,vec)
+gles_start=calls
+V=OBJECT+0x7000
+matrix=[float_word(v/4-2) for v in range(16)]
+put(V,*matrix)
+for align in (0,4):
+ def state(name,args,backend,ints=(),floats=(),values=()):
+  previous=len(gles_seen)
+  for r in range(8):u.reg_write(UC_ARM_REG_S0+r,0x7fc00000)
+  call('_'+name,args,align)
+  assert len(gles_seen)==previous+1
+  assert gles_seen[-1]==(backend,tuple(ints),tuple(floats),tuple(values)),(name,gles_seen[-1],ints,floats,values)
+ for name,ints,params in (
+  ('glAlphaFunc',[0x204],[.25]),('glClearColor',[],[.125,.25,.5,1.]),
+  ('glClearDepthf',[],[.75]),('glDepthRangef',[],[.125,.875]),('glFogf',[0xb62],[.5]),
+  ('glFrustumf',[],[-2.,3.,-4.,5.,.25,200.]),('glOrthof',[],[-1.,10.,-2.,20.,-5.,50.]),
+  ('glRotatef',[],[45.,0.,1.,0.]),('glScalef',[],[2.,-.5,3.]),
+  ('glTranslatef',[],[-10.,20.,.25]),('glMaterialf',[0x408,0x1601],[32.])):
+  values=[float_word(v) for v in params]
+  state(name,ints+values,name,ints,values)
+ for pname in (0x1207,0x1208,0x1209):
+  # Scalar float r2 must become a pointer to exactly one real float, not an
+  # address misread from the original float bits or an undersized vector.
+  value=float_word(.125)
+  before=len(gles_seen);call('_glLightf',[0x4002,pname,value],align)
+  assert len(gles_seen)==before+1
+  name,ints,floats,vector=gles_seen[-1]
+  assert name=='glLightfv' and ints[:2]==(0x4002,pname) and floats==() and vector==(value,)
+ # Vector input address is passed unchanged.
+ state('glLightfv',[0x4001,0x1203,V],'glLightfv',[0x4001,0x1203,V],(),matrix[:4])
+ # Valid nonnegative attenuation input, using a separate slot.
+ put(V+80,float_word(.5));state('glLightfv',[0x4001,0x1208,V+80],'glLightfv',[0x4001,0x1208,V+80],(),[float_word(.5)])
+ state('glFogfv',[0xb66,V],'glFogfv',[0xb66,V],(),matrix[:4])
+ state('glLightModelfv',[0xb53,V],'glLightModelfv',[0xb53,V],(),matrix[:4])
+ state('glMaterialfv',[0x408,0x1200,V],'glMaterialfv',[0x408,0x1200,V],(),matrix[:4])
+ state('glLoadMatrixf',[V],'glLoadMatrixf',[V],(),matrix)
+ state('glMultMatrixf',[V],'glMultMatrixf',[V],(),matrix)
+ fixed=[0xffff0000,0,0x8000,0x10000]
+ state('glClearColorx',fixed,'glClearColorx',fixed)
+ # Guards must stop before reaching a backend that could index out of bounds
+ # or read four floats from a one-float scalar temporary.
+ for name,args,error in (
+  ('glLightf',[0x4000,0x1200,float_word(1.)],0x500),
+  ('glLightf',[0x3fff,0x1209,float_word(1.)],0x500),
+  ('glLightf',[0x4008,0x1209,float_word(1.)],0x500),
+  ('glLightf',[0x4000,0x1209,float_word(-.5)],0x501),
+  ('glLightfv',[0xffffffff,0x1200,V],0x500),
+  ('glLightfv',[0x4000,0x1203,0],0x501),
+  ('glLightfv',[0x4000,0x1204,V],0x500),
+  ('glLightfv',[0x4000,0x1208,V],0x501)):
+  before=len(gles_seen);call('_'+name,args,align);assert len(gles_seen)==before
+  assert call('_glGetError',[],align)==error
+  assert call('_glGetError',[],align)==0
+ # First error is preserved until read; next GetError falls through to backend.
+ call('_glLightf',[0x4009,0x1209,0],align)
+ call('_glLightfv',[0x4000,0x1203,0],align)
+ assert call('_glGetError',[],align)==0x500
+ assert call('_glGetError',[],align)==0
+print(f'PASS: {calls-gles_start} GLES ARM state/error calls, 19 import entries, register/stack-to-VFP forwarding, scalar/vector lighting, matrix pointers and first-error guards at both alignments. VitaGL entrypoints captured; no GPU output verified.')

@@ -39,6 +39,9 @@ extern const int legacy_string_imports_count;
 extern const import_entry darwin_imports[];
 extern const int darwin_imports_count;
 
+extern const import_entry gles_float_imports[];
+extern const int gles_float_imports_count;
+
 extern const import_entry gles_imports[];
 extern const int gles_imports_count;
 
