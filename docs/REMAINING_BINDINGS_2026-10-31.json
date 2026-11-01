@@ -1,11 +1,10 @@
 {
   "original_imports": 490,
-  "loader_table_names": 455,
-  "matched_original_imports": 344,
-  "unresolved_original_imports": 146,
+  "loader_table_names": 457,
+  "matched_original_imports": 346,
+  "unresolved_original_imports": 144,
   "unresolved_symbols": [
     "_CC_MD5",
-    "_CFRunLoopRunInMode",
     "_CGBitmapContextCreateImage",
     "_CGContextDrawImage",
     "_CGContextDrawLinearGradient",
@@ -117,7 +116,6 @@
     "_inet_aton",
     "_inet_ntoa",
     "_ioctl",
-    "_kCFRunLoopDefaultMode",
     "_localeconv",
     "_localtime",
     "_longjmp",

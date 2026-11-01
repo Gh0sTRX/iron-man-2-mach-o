@@ -1,0 +1,105 @@
+{
+  "macho_sha256": "3ba6337a23ab7e08f2e025ec9731c53a7990e8d611b59eac07ba00cb63acc629",
+  "elf_sha256": "f26e0daebb26e82144fc6fdc151eeaafb79c366f2a8a8717ceb9895b537e8724",
+  "main_called": true,
+  "constructors_returned": 297,
+  "guest_classes_registered": 25,
+  "guest_cfstrings_registered": 165,
+  "guest_reference_validation_errors": [
+    "unregistered Objective-C class reference at 0x004e4d50: 0x29000b00"
+  ],
+  "framework_os_fixtures": "Turkish language, absent preferences, single-thread mutex/identity and deterministic monotonic process clock; no physical OS services",
+  "status": "stopped",
+  "failure": {
+    "reason": "native_thread_creation_boundary",
+    "pc": "0x28000f20",
+    "lr": "0x51094",
+    "phase": "main",
+    "symbol": "_pthread_create",
+    "start_routine": "0x51984",
+    "argument": "0x0",
+    "note": "Single-thread diagnostic has no OS thread scheduler; production callback bridge is not replaced by fake success."
+  },
+  "worker_called": true,
+  "worker_entry": "0x51984",
+  "worker_status": "stopped",
+  "worker_failure": {
+    "reason": "unbound_import_execution",
+    "pc": "0x290016c0",
+    "lr": "0x5127c",
+    "phase": "worker",
+    "symbol": "_chdir"
+  },
+  "worker_probe_model": "Main paused; separate stack and pthread-key values/identity. Shared libc reent/OS fixtures; no concurrent scheduling. Synchronization traps.",
+  "physical_vita_verified": false,
+  "gpu_verified": false,
+  "date_istanbul": "2026-11-01",
+  "source_commit": "5d6c8d9694ded2b4c35692f3ec966f5ae34c5baa",
+  "source_units": 51,
+  "github_ci": {
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41302291233",
+    "status": "completed",
+    "conclusion": "success",
+    "job_started": true,
+    "tests_executed": true,
+    "overall_passed": true,
+    "owner_private_image_executed_in_ci": false
+  },
+  "host_asan_ubsan_passed": true,
+  "real_host_concurrent_timer_queues_passed": true,
+  "host_clock_is_deterministic": true,
+  "retained_timer_after_owner_exit_passed": true,
+  "arm_runloop_timer_calls": 26,
+  "worker_synthetic_return_and_sync_trap_passed": true,
+  "owner_native_thread_created": false,
+  "owner_concurrent_scheduling_verified": false,
+  "matched_original_import_names": 346,
+  "missing_original_import_names": 144,
+  "vpk_created": false,
+  "release_gates_changed": false,
+  "worker_import_trace": [
+    {
+      "name": "_CFBundleGetMainBundle",
+      "lr": "0x511f0",
+      "constructor": 297,
+      "phase": "worker"
+    },
+    {
+      "name": "_CFBundleCopyResourcesDirectoryURL",
+      "lr": "0x511fc",
+      "constructor": 297,
+      "phase": "worker"
+    },
+    {
+      "name": "_CFURLGetFileSystemRepresentation",
+      "lr": "0x51214",
+      "constructor": 297,
+      "phase": "worker"
+    },
+    {
+      "name": "_strlen",
+      "lr": "0x51234",
+      "constructor": 297,
+      "phase": "worker"
+    },
+    {
+      "name": "_strcpy",
+      "lr": "0x5124c",
+      "constructor": 297,
+      "phase": "worker"
+    },
+    {
+      "name": "_strcat",
+      "lr": "0x51270",
+      "constructor": 297,
+      "phase": "worker"
+    }
+  ],
+  "limits": [
+    "Original worker entry was called directly with separate modeled pthread-key values/identity and stack while main was stopped; this is not concurrent owner scheduling.",
+    "Libc reent and some OS fixtures remain shared; worker synchronization is a conservative trap boundary.",
+    "Original worker stopped at missing chdir before reaching original CFRunLoop call. New runloop behavior is verified by host/ARM synthetic tests, not owner-loop execution.",
+    "Default mode supports selector timers only; network/Mach sources, nested loops, stop and NSRunLoop class are not implemented.",
+    "Cross-thread timer access, full thread-exit autorelease cleanup, cancellation/unwind, GPU and physical Vita acceptance remain limited or unverified."
+  ]
+}
