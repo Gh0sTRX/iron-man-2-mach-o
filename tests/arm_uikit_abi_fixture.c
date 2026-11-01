@@ -15,6 +15,10 @@ int strcmp(const char *a,const char *b){while(*a && *a==*b){a++;b++;}return (uns
 void *calloc(size_t n,size_t size){if(n>8192 || size>8192 || n*size>sizeof(heap)-used)return NULL;size_t length=(n*size+15)&~15u;if(length>sizeof(heap)-used)return NULL;void *p=heap+used;used+=length;return memset(p,0,length);}
 void free(void *p){(void)p;}
 __attribute__((noreturn)) void abort(void){__asm__ volatile("bkpt #0");for(;;){}}
+/* Palette factories are outside this isolated CGRect fixture. The full linked
+ * ARM runtime test exercises them; accidental use here must trap, not pass. */
+void *im2_objc_alloc(Im2ObjcClass *cls,void (*destroy)(void *)){(void)cls;(void)destroy;abort();}
+void *im2_objc_autorelease(void *object){(void)object;abort();}
 int pthread_mutex_lock(pthread_mutex_t *p){(void)p;return 0;}
 int pthread_mutex_unlock(pthread_mutex_t *p){(void)p;return 0;}
 Im2ObjcClass *im2_objc_register_class(const char *name,Im2ObjcClass *super,size_t size,const Im2MethodSpec *im,size_t ni,const Im2MethodSpec *cm,size_t nc){
