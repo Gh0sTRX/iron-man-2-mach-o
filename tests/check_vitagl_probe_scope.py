@@ -26,7 +26,9 @@ assert '-DIM2_VITAGL_ENV_PROBE=ON' in helper
 assert '-DIM2_VITAGL_ENV_PROBE=OFF' in (root/'tools/build_loader_elf.sh').read_text()
 assert not re.search(r'\b(vita_create_self|vita_create_vpk|vita-make-fself)\b',cmake+helper)
 workflow=(root/'.github/workflows/loader-readiness.yml').read_text()
-assert 'build_device_diagnostics.sh' not in workflow, 'Default CI must not package diagnostics'
+assert 'default: false' in workflow
+assert "if: github.event_name == 'workflow_dispatch' && inputs.device_diagnostics\n        run:" in workflow
+assert workflow.count('bash tools/build_device_diagnostics.sh')==1
 vm_cmake=(root/'tests/vita_exec_probe/CMakeLists.txt').read_text()
 assert re.search(r'option\(IM2_PACKAGE_VM_PROBE[^\n]+ OFF\)',vm_cmake)
 assert '-DIM2_PACKAGE_VM_PROBE=OFF' in (root/'tools/build_vm_environment_probe.sh').read_text()

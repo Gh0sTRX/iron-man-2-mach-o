@@ -1,6 +1,11 @@
 name: Mach-O loader source readiness (no VPK)
 on:
   workflow_dispatch:
+    inputs:
+      device_diagnostics:
+        description: 'Explicitly build/upload asset-free device diagnostics after checks (not game VPK)'
+        type: boolean
+        default: false
   push:
     branches: [experiment/ios-macho-loader]
     paths:
@@ -45,3 +50,21 @@ jobs:
           fi
           test ! -f build/loader-full/eboot.bin
           test -z "$(find build -name '*.vpk' -print -quit)"
+      - name: Explicit device diagnostic packaging (manual opt-in only)
+        if: github.event_name == 'workflow_dispatch' && inputs.device_diagnostics
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+            vitasdk/vitasdk@sha256:8227da1b596d981f4513cd9b36bda1e43857f6dae5bcf4312c1cd40167f7d9bb \
+            bash tools/build_device_diagnostics.sh
+          (cd build/device-diagnostics && sha256sum im2-vitagl-diagnostic.vpk im2-vm-diagnostic.vpk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' && inputs.device_diagnostics
+        with:
+          name: im2-device-diagnostics-${{ github.sha }}
+          path: |
+            build/device-diagnostics/im2-vitagl-diagnostic.vpk
+            build/device-diagnostics/im2-vm-diagnostic.vpk
+            build/device-diagnostics/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
