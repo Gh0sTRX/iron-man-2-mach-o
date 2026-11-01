@@ -2,7 +2,7 @@
 
 31 Ekim 2026 — `Gh0sTRX/iron-man-2-mach-o`, `experiment/ios-macho-loader`.
 
-**Şu an:** Özgün oyunun 297 statik başlangıç işlevi ve kaydettikleri 359 kapanış callback'i Unicorn ARM emülatöründe tamamlandı; `_main` çağrılmadı. Yükleyici ve kısmi iOS uyumluluk kodu derleniyor; yerel otomatik testler geçiyor. Son GitHub Actions işi hesap ödeme/harcama limiti nedeniyle başlamadı; son kaynak commit için CI başarısı iddia edilmiyor. **Özgün oyun native Vita yükleyicisiyle henüz açılmadı.** Vita menüsü, oynanış ve fiziksel cihaz başarısı doğrulanmadı. Linux touchHLE'de görülen gerçek menü ayrı bir referans çalışmasıdır.
+**Şu an (1 Kasım güncellemesi):** 25 özgün sınıf ve 165 CFString kaydedildi; 297 constructor tamamlandı. Özgün `_main` / uygulama açılışı Unicorn ARM tanılamasında ikinci thread başlatma isteğine ulaştı. Bu ayrı tanılama bütün importları doğrulamaz; üretim kapıları kapalıdır. Yerel testler geçti. Yeni GitHub CI işinde host kontrolleri, VitaSDK derlemesi ve ARM/Thumb/sentetik replay testlerinin tamamı geçti; özel owner yürütmesi ayrı yerel kanıttır. **Özgün oyun native Vita yükleyicisiyle henüz açılmadı.** Menü, GPU ve fiziksel cihaz başarısı doğrulanmadı. Linux touchHLE menüsü ayrı bir referans çalışmasıdır.
 
 Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştirilmedi; o projenin deneysel sahnesi bu yükleyicinin oyun çalıştırma kanıtı sayılmaz.
 
@@ -35,7 +35,7 @@ Bu rapor bağımsız Mach-O projesine aittir. `Iron-man-2-os` projesi değiştir
 
 ### 1. İlk gerçek açılışı engelleyen iOS bağımlılıkları
 
-Özgün 490 import adının **338'i** tablolarla eşleşiyor; **152 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **26'sı kısmi**, **38'i uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
+Özgün 490 import adının **339'u** tablolarla eşleşiyor; **151 ad hâlâ eksik**. Gerekli 64 harici framework sınıfından **27'si kısmi**, **37'si uygulanmamış**. Eşleşen adların hepsi doğru davranış/ABI ile doğrulanmış değildir. Bu sayılar tamamlanma yüzdesi değildir.
 
 Eksik Apple/CoreFoundation/UIKit API'leri, C/C++ runtime bağlantıları, bazı GLES çağrıları ve sistem/dosya/ağ işlevleri gerçek davranışlarıyla ele alınmalı. `NSLocale`, `NSRunLoop`, çeşitli UIKit/medya sınıfları hâlâ eksik örneklerdir. NSBundle/tercih plist okuma ve gerekirse diğer veri formatları tamamlanmalı; oyun sürümü/ayarları uydurulmamalı.
 
@@ -82,7 +82,7 @@ CFBundleGetMainBundle, CFBundleCopyBundleURL, CFBundleCopyResourcesDirectoryURL,
 
 Tam eksik isim envanteri [REMAINING_BINDINGS_2026-10-31.json](REMAINING_BINDINGS_2026-10-31.json), yerel derleme kanıtı [BUILD_EVIDENCE_2026-10-31.json](BUILD_EVIDENCE_2026-10-31.json) içindedir.
 
-**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 152 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
+**Ne kadar kaldı?** Oynanabilir Vita sürümüne kadar ciddi entegrasyon ve cihaz testi işi var. Henüz güvenilir gün veya yüzde tahmini verilemiyor. En yakın ölçülebilir hedef ilk native Vita çizimi; bundan sonra menü ve kontrollerin kabul testi. Eksik 151 adı aynı büyüklükte işler saymak yanıltıcı olur; tek bir kritik ABI hatası bile açılışı durdurabilir.
 
 Yeni C++ katmanı ve özgün çağrı yerleri: [LEGACY_CPP_PROGRESS_2026-10-31_TR.md](LEGACY_CPP_PROGRESS_2026-10-31_TR.md).
 
@@ -105,3 +105,5 @@ C++ stream ve inline ABI: [CPP_STREAM_PROGRESS_2026-10-31_TR.md](CPP_STREAM_PROG
 Zaman ve NSDate: [TIME_DATE_PROGRESS_2026-10-31_TR.md](TIME_DATE_PROGRESS_2026-10-31_TR.md).
 
 Özgün başlangıç kodu ve gerçek kapanış kuyruğu: [OWNER_STARTUP_PROGRESS_2026-10-31_TR.md](OWNER_STARTUP_PROGRESS_2026-10-31_TR.md).
+
+1 Kasım güncellemesi: 25 özgün sınıf ve 165 CFString kaydından sonra özgün `_main` / uygulama açılışı emülatörde thread başlatma sınırına ulaştı. Menü/native Vita başarısı değildir. Ayrıntılar: [ORIGINAL_MAIN_PROGRESS_2026-11-01_TR.md](ORIGINAL_MAIN_PROGRESS_2026-11-01_TR.md).

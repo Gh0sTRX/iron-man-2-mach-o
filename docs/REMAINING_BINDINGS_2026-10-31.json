@@ -1,8 +1,8 @@
 {
   "original_imports": 490,
-  "loader_table_names": 448,
-  "matched_original_imports": 338,
-  "unresolved_original_imports": 152,
+  "loader_table_names": 450,
+  "matched_original_imports": 339,
+  "unresolved_original_imports": 151,
   "unresolved_symbols": [
     "_CC_MD5",
     "_CFRunLoopRunInMode",
@@ -52,7 +52,6 @@
     "_OBJC_CLASS_$_UIAccelerometer",
     "_OBJC_CLASS_$_UIActivityIndicatorView",
     "_OBJC_CLASS_$_UIAlertView",
-    "_OBJC_CLASS_$_UIColor",
     "_OBJC_CLASS_$_UIDevice",
     "_OBJC_CLASS_$_UIFont",
     "_OBJC_CLASS_$_UIImage",
@@ -186,11 +185,11 @@
     "NSUserDefaults",
     "UIScreen",
     "UIWindow",
-    "NSDate"
+    "NSDate",
+    "UIColor"
   ],
   "unimplemented_external_classes": [
     "UIDevice",
-    "UIColor",
     "UIAlertView",
     "UIActivityIndicatorView",
     "UIFont",
@@ -229,5 +228,6 @@
     "UIWebView"
   ],
   "physical_vita_verified": false,
-  "original_native_vita_execution_verified": false
+  "original_native_vita_execution_verified": false,
+  "updated_date_istanbul": "2026-11-01"
 }
