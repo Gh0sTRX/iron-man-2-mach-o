@@ -853,3 +853,100 @@ for align in (0,4):
  assert get(LOG,4)==(3,20,77,10) and call('im2_exit_pending',[],align)==0
  call('darwin_run_exit_callbacks',[],align);assert pointer(LOG)==3
 print(f'PASS: {calls-exit_start} ARM exit-registry calls; actual ARM/Thumb guest callbacks, mixed LIFO/exactly-once and guest r9 clobber preserved by production call_guest.')
+
+# +new must dispatch both +alloc and -init, including an inherited native +new
+# entering an original-ABI guest initializer. No synthetic initializer shortcut.
+new_start=calls
+for name in ('im2_objc_register_foreign_class','im2_objc_release'):
+ entries['__'+name]=(symbols[name],0)
+scratch=OBJECT+0xc000
+def text_at(offset,text):
+ address=scratch+offset;u.mem_write(address,text.encode()+b'\0');return address
+def spec_at(address,selector,imp):
+ put(address,selector,text_at(0x300,'@@:'),imp,0)
+im=scratch;cm=scratch+64
+spec_at(im,text_at(0x200,'init'),symbols['object_init'])
+spec_at(im+16,text_at(0x210,'dealloc'),symbols['object_dealloc'])
+spec_at(cm,text_at(0x220,'alloc'),symbols['object_alloc'])
+spec_at(cm+16,text_at(0x230,'new'),symbols['object_new'])
+native_new=call('im2_objc_register_class',[text_at(0x240,'NativeNewTest'),root,4,im,2,cm,2]);assert native_new
+guest_init=EXIT_CODE+256
+u.mem_write(guest_init,struct.pack('<3I',0xe3a0909a,0xe5809004,0xe12fff1e))
+guest_spec=scratch+128;spec_at(guest_spec,text_at(0x200,'init'),guest_init)
+guest_new=call('im2_objc_register_foreign_class',[text_at(0x260,'GuestNewTest'),scratch+0x400,scratch+0x420,native_new,8,guest_spec,1,0,0]);assert guest_new
+nil_alloc=EXIT_CODE+288;u.mem_write(nil_alloc,struct.pack('<2I',0xe3a00000,0xe12fff1e))
+nil_spec=scratch+160;spec_at(nil_spec,text_at(0x220,'alloc'),nil_alloc)
+nil_new=call('im2_objc_register_foreign_class',[text_at(0x280,'NilAllocTest'),scratch+0x440,scratch+0x460,native_new,8,0,0,nil_spec,1]);assert nil_new
+for align in (0,4):
+ assert call('_objc_msgSend',[nil_new,scratch+0x230],align)==0
+ for cls in (native_new,guest_new):
+  o=call('_objc_msgSend',[cls,scratch+0x230],align);assert o and pointer(o)==cls
+  assert call('im2_objc_retain_count',[o],align)==1
+  if cls==guest_new:assert pointer(o+4)==0x9a
+  assert call('im2_objc_release',[o],align)==0
+print(f'PASS: {calls-new_start} ARM NSObject +new calls; alloc/init dispatch, guest initializer side effect/r9 clobber, +1 ownership and real destruction at both stack alignments.')
+
+color_start=calls
+for name in ('im2_uikit_hierarchy_init','im2_uikit_color_rgba'):
+ entries['__'+name]=(symbols[name],0)
+assert call('im2_uikit_hierarchy_init',[root,0])==0
+color_class=call('im2_objc_class_named',[text_at(0x600,'UIColor')]);assert color_class
+view_class=call('im2_objc_class_named',[text_at(0x620,'UIView')]);assert view_class
+for align in (0,4):
+ pool=call('im2_objc_alloc',[root,0],align);assert call('im2_objc_pool_push',[pool],align)==0
+ view=call('im2_objc_alloc',[view_class,symbols['view_dealloc']],align);assert view
+ call('_objc_msgSend',[view,text_at(0x6b0,'setExclusiveTouch:'),3],align)
+ assert call('_objc_msgSend',[view,text_at(0x6d0,'isExclusiveTouch')],align)==1
+ call('_objc_msgSend',[view,text_at(0x6b0,'setExclusiveTouch:'),0x100],align)
+ assert call('_objc_msgSend',[view,text_at(0x6d0,'isExclusiveTouch')],align)==0
+ for selector,expected in (('blackColor',(0.,0.,0.,1.)),('whiteColor',(1.,1.,1.,1.)),('clearColor',(0.,0.,0.,0.))):
+  color=call('_objc_msgSend',[color_class,text_at(0x650,selector)],align);assert color
+  assert call('im2_uikit_color_rgba',[color,scratch+0x800],align)==0
+  assert struct.unpack('<4f',u.mem_read(scratch+0x800,16))==expected
+  call('_objc_msgSend',[view,text_at(0x670,'setBackgroundColor:'),color],align)
+  assert call('_objc_msgSend',[view,text_at(0x690,'backgroundColor')],align)==color
+  assert call('im2_objc_retain_count',[color],align)==2
+ assert call('im2_objc_pool_drain',[pool],align)==0
+ assert call('im2_objc_retain_count',[color],align)==1
+ assert call('im2_objc_release',[view],align)==0
+ assert call('im2_objc_retain_count',[color],align)==0
+print(f'PASS: {calls-color_start} ARM UIColor/background/exclusive calls; real dispatch, RGBA values, BOOL low-byte input, pool/retained background ownership and view destruction. No GPU pixels verified.')
+
+thread_start=calls
+for i in range(struct.unpack('<I',read(symbols['darwin_imports_count'],4))[0]):
+ name,target,kind=struct.unpack('<III',read(symbols['darwin_imports']+12*i,12))
+ if cstring(name)=='_pthread_create':entries['_pthread_create']=(target,kind)
+thread_outcomes={'pthread_attr_init':0,'pthread_attr_setstacksize':0,'pthread_create':0}
+thread_seen=[];thread_context=[]
+thread_native={symbols[name]&~1:name for name in (*thread_outcomes,'pthread_attr_destroy')}
+def thread_hook(uc,address,size,context):
+ name=thread_native.get(address)
+ if not name:return
+ thread_seen.append(name)
+ if name=='pthread_attr_setstacksize':assert uc.reg_read(UC_ARM_REG_R1)==512*1024
+ if name=='pthread_create' and not thread_outcomes[name]:
+  thread_context[:]=[uc.reg_read(UC_ARM_REG_R2),uc.reg_read(UC_ARM_REG_R3)]
+  uc.mem_write(uc.reg_read(UC_ARM_REG_R0),struct.pack('<I',1))
+ uc.reg_write(UC_ARM_REG_R0,thread_outcomes.get(name,0))
+ uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+u.hook_add(UC_HOOK_CODE,thread_hook)
+thread_guest=EXIT_CODE+320;u.mem_write(thread_guest,struct.pack('<2I',0xe3a0909b,0xe12fff1e))
+for align in (0,4):
+ before=dict(live);assert call('_pthread_create',[0,0,thread_guest,0],align)==22 and live==before
+ saved_allocate=allocate
+ try:
+  allocate=lambda size:0
+  assert call('_pthread_create',[scratch+0xa00,0,thread_guest,0],align)==12
+ finally:allocate=saved_allocate
+ for operation,error in (('pthread_attr_init',22),('pthread_attr_setstacksize',22),('pthread_create',11)):
+  thread_outcomes[operation]=error;thread_seen.clear();before=dict(live)
+  assert call('_pthread_create',[scratch+0xa00,0,thread_guest,0],align)==error and live==before
+  if operation=='pthread_attr_init':assert thread_seen==['pthread_attr_init']
+  else:assert thread_seen[-1]=='pthread_attr_destroy'
+  thread_outcomes[operation]=0
+ before=dict(live)
+ assert call('_pthread_create',[scratch+0xa00,0,thread_guest,0xfeed],align)==0
+ assert len(live)==len(before)+1
+ entries['__test_thread_entry']=(thread_context[0],0)
+ assert call('test_thread_entry',[thread_context[1]],align)==0xfeed and live==before
+print(f'PASS: {calls-thread_start} ARM pthread bridge calls; OOM/invalid args, attr/create failure cleanup, real trampoline/free/call_guest and guest r9 preservation. OS thread creation/scheduling modeled.')

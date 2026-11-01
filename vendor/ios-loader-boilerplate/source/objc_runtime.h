@@ -4,6 +4,9 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+/* Owner ReviewWriteViewController has 65 methods. Keep the parser and runtime
+ * bound identical, with room for validated lists rather than an unbounded cap. */
+#define IM2_OBJC_METHOD_LIMIT 128u
 typedef struct im2_objc_class Im2ObjcClass;
 typedef void (*Im2Imp)(void);
 typedef struct { const char *selector, *types; Im2Imp imp; size_t stret_size; } Im2MethodSpec;

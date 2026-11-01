@@ -156,6 +156,21 @@ int main(void) {
     assert(!im2_uikit_view_invalidation(v,&needs_layout,&needs_display));
     assert(needs_layout==1 && needs_display==1);
     assert(im2_uikit_view_invalidation(v,NULL,&needs_display));
+    void *pool=im2_objc_alloc(root,NULL);assert(pool && !im2_objc_pool_push(pool));
+    Im2ObjcClass *colors=im2_objc_class_named("UIColor");assert(colors);
+    void *black=message_obj0(colors,"blackColor");float rgba[4];
+    assert(black && !im2_uikit_color_rgba(black,rgba));
+    assert(rgba[0]==0 && rgba[1]==0 && rgba[2]==0 && rgba[3]==1);
+    message_void1(v,"setBackgroundColor:",black);
+    message_void1(v,"setBackgroundColor:",black);
+    assert(message_obj0(v,"backgroundColor")==black && im2_objc_retain_count(black)==2);
+    void *white=message_obj0(colors,"whiteColor"),*clear=message_obj0(colors,"clearColor");
+    assert(!im2_uikit_color_rgba(white,rgba) && rgba[0]==1 && rgba[3]==1);
+    assert(!im2_uikit_color_rgba(clear,rgba) && rgba[3]==0);
+    assert(im2_uikit_color_rgba(v,rgba));
+    assert(!im2_objc_pool_drain(pool) && im2_objc_retain_count(black)==1);
+    message_void1(v,"setBackgroundColor:",NULL);assert(!message_obj0(v,"backgroundColor"));
+    assert(!im2_objc_retain_count(black) && !im2_objc_retain_count(white) && !im2_objc_retain_count(clear));
 
     set_hidden(v,3);assert(hidden(v)==1);
     set_hidden(v,0);assert(hidden(v)==0);

@@ -69,7 +69,7 @@ int main(void) {
     assert(root->data->first_subclass==NULL);
     assert(im2_objc_validate_guest_refs(BASE+0x600,3,read_guest,NULL,error,sizeof(error))); /* removed class IDs are stale */
     struct {uint32_t slot,value;} bad[]={
-        {BASE+0x200+20,BASE+0x1ffc},{BASE+0x400,16},{BASE+0x404,65},
+        {BASE+0x200+20,BASE+0x1ffc},{BASE+0x400,16},{BASE+0x404,IM2_OBJC_METHOD_LIMIT+1},
         {BASE+0x408,BASE+0x1fff},{BASE+0x410,BASE+0x1802},
         {BASE+0x410,BASE+0x800},{BASE+0x120+4,meta+4},
         {BASE+0x240,0},{BASE+0x200,4},{BASE+0x100+16,BASE+0x1ffc},
@@ -83,5 +83,18 @@ int main(void) {
     assert(im2_objc_register_guest_list(BASE+1,2,read_guest,NULL,error,sizeof(error)));
     assert(im2_objc_register_guest_list(BASE,65,read_guest,NULL,error,sizeof(error)));
     assert(im2_objc_register_guest_list(0xfffffffcu,2,read_guest,NULL,error,sizeof(error)));
+    /* A legitimate owner class crosses the former 64-method cap. Preserve and
+     * resolve its last method, rather than just accepting its count field. */
+    memcpy(image,backup,sizeof(image));put(BASE+0x404,65);
+    string(BASE+0x1700,"I8@0:4");
+    for(unsigned i=0;i<65;i++) {
+        char selector[16];snprintf(selector,sizeof(selector),"method%u",i);
+        put(BASE+0x408+12*i,string(BASE+0x900+16*i,selector));
+        put(BASE+0x40c+12*i,BASE+0x1700);put(BASE+0x410+12*i,BASE+0x1801);
+    }
+    assert(!im2_objc_register_guest_list(BASE+4,1,read_guest,NULL,error,sizeof(error)));
+    o=im2_objc_alloc((void *)(uintptr_t)(BASE+0x100),NULL);assert(o);
+    assert(!im2_objc_lookup_target(o,"method64",NULL,&target) && target.guest && (uintptr_t)target.imp==BASE+0x1801);
+    assert(!im2_objc_release(o));assert(!im2_objc_registration_rollback(checkpoint));
     puts("PASS: original-identity ObjC2 registration, guest/native inherited dispatch, hierarchy, rollback and malformed metadata");
 }

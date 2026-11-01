@@ -22,11 +22,11 @@ for i in range(0,len(names),2):
 capacity=re.search(r"static import_entry class_imports\[(\d+)\];",src)
 assert capacity and int(capacity.group(1))==len(names)+1,(capacity,len(names))
 fill=re.search(r"for\(size_t i=0;i<(\d+);i\+\+\) \{",src)
-assert fill and int(fill.group(1))==len(names),"Class table initializer skips entries"
+assert (fill and int(fill.group(1))==len(names)) or 'for(size_t i=0;i<sizeof(names)/sizeof(names[0]);i++) {' in src,"Class table initializer skips entries"
 last=re.search(r"class_imports\[(\d+)\]=\(import_entry\)\{\"___CFConstantStringClassReference",src)
 assert last and int(last.group(1))==len(names),"CFString slot must follow class pairs"
 lookup=re.search(r"for\(size_t i=0;i<(\d+);i\+\+\)if\(class_imports\[i\]\.name",src)
-assert lookup and int(lookup.group(1))==len(names)+1,"Class lookup scans wrong range"
+assert (lookup and int(lookup.group(1))==len(names)+1) or 'for(size_t i=0;i<sizeof(class_imports)/sizeof(class_imports[0]);i++)if(class_imports[i].name' in src,"Class lookup scans wrong range"
 new_modules={"url":"im2_url_init(root,foundation_failure)",
              "url_request":"im2_url_request_init(root,foundation_failure)",
              "file_manager":"im2_file_manager_init(root)"}

@@ -47,7 +47,8 @@
 
 typedef Im2String ns_string;
 static Im2ObjcClass *string_class,*pool_class;
-static import_entry class_imports[67];
+static import_entry class_imports[69];
+const int objc_class_imports_count=sizeof(class_imports)/sizeof(class_imports[0]);
 static void bind_class_imports(void) {
     static const char *names[]={"_OBJC_CLASS_$_NSObject","_OBJC_METACLASS_$_NSObject",
         "_OBJC_CLASS_$_NSString","_OBJC_METACLASS_$_NSString",
@@ -81,15 +82,16 @@ static void bind_class_imports(void) {
         "_OBJC_CLASS_$_NSSet","_OBJC_METACLASS_$_NSSet",
         "_OBJC_CLASS_$_UITouch","_OBJC_METACLASS_$_UITouch",
         "_OBJC_CLASS_$_UIEvent","_OBJC_METACLASS_$_UIEvent",
-        "_OBJC_CLASS_$_NSDate","_OBJC_METACLASS_$_NSDate"};
-    for(size_t i=0;i<66;i++) {
+        "_OBJC_CLASS_$_NSDate","_OBJC_METACLASS_$_NSDate",
+        "_OBJC_CLASS_$_UIColor","_OBJC_METACLASS_$_UIColor"};
+    for(size_t i=0;i<sizeof(names)/sizeof(names[0]);i++) {
         const char *name=names[i];
         Im2ObjcClass *c=im2_objc_class_named(i&1?name+18:name+14);
         const Im2ObjcClass *m=im2_objc_class_metadata(c);
         if(!m)fatal_error("Missing native class import: %s",name);
         class_imports[i]=(import_entry){name,(uintptr_t)(i&1?m->isa:c),IM2_IMPORT_DATA};
     }
-    class_imports[66]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
+    class_imports[68]=(import_entry){"___CFConstantStringClassReference",(uintptr_t)string_class,IM2_IMPORT_DATA};
 }
 static ns_string *ns_new(const char *text) {
     ns_string *s=im2_string_create(text,1);
@@ -364,6 +366,19 @@ static void object_destroy(void *self) {
 static void *object_alloc(Im2ObjcClass *self,const char *sel) {
     (void)sel; return im2_objc_alloc(self,object_destroy);
 }
+static void *object_send_noargs(void *self,const char *selector) {
+    Im2ObjcTarget target;
+    const char *sel=im2_objc_sel_register(selector);
+    if(!sel || im2_objc_lookup_target(self,sel,NULL,&target) || target.stret_size)
+        fatal_error("Unsupported NSObject new stage: %s",selector);
+    if(target.guest)return (void *)(uintptr_t)call_guest((void *)target.imp,(uint32_t)self,(uint32_t)sel,0,0);
+    return ((void *(*)(void *,const char *))target.imp)(self,sel);
+}
+static void *object_new(Im2ObjcClass *self,const char *sel) {
+    (void)sel;
+    void *object=object_send_noargs(self,"alloc");
+    return object?object_send_noargs(object,"init"):NULL;
+}
 static void object_dealloc(void *self,const char *sel) {
     (void)sel;
     /* The outer release owns storage disposal after the dealloc chain returns. */
@@ -420,9 +435,9 @@ void objc_init(void) {
         METHOD("release","v@:",object_release),METHOD("autorelease","@@:",object_autorelease),
         METHOD("class","#@:",object_class),METHOD("respondsToSelector:","c@::",object_responds),
         METHOD("dealloc","v@:",object_dealloc)};
-    const Im2MethodSpec root_class[]={METHOD("alloc","@@:",object_alloc),METHOD("class","#@:",class_class)};
+    const Im2MethodSpec root_class[]={METHOD("alloc","@@:",object_alloc),METHOD("class","#@:",class_class),METHOD("new","@@:",object_new)};
     Im2ObjcClass *root=im2_objc_register_class("NSObject",NULL,sizeof(Im2ObjcObject),
-        root_instance,7,root_class,2);
+        root_instance,7,root_class,3);
     const Im2FoundationConfig foundation={BUNDLE_PATH,(Im2Imp)string_format,foundation_failure,darwin_path};
     if(im2_foundation_init(root,&foundation))fatal_error("Foundation registration failed");
     if(im2_collections_init(root,foundation_failure))fatal_error("Collection registration failed");
@@ -455,7 +470,7 @@ void objc_init(void) {
 }
 const import_entry *objc_class_import(const char *name) {
     if(!name)return NULL;
-    for(size_t i=0;i<67;i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
+    for(size_t i=0;i<sizeof(class_imports)/sizeof(class_imports[0]);i++)if(class_imports[i].name && !strcmp(name,class_imports[i].name))return &class_imports[i];
     return NULL;
 }
 

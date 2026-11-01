@@ -18,6 +18,8 @@ typedef struct {float x,y,width,height;} Im2Rect32;
 /* Registers verified guest superclass identities, plus limited view state.
  * Registration must happen before parsing __objc_classlist. */
 int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*failure)(const char *));
+/* Supported immutable palette colors; storage/state only, not GPU rasterization. */
+int im2_uikit_color_rgba(const void *color,float out[4]);
 
 /* Internal observation for tests and eventual renderer; does not mimic CGRect
  * return ABI. Returns -1 until a frame was explicitly initialized. */
@@ -40,3 +42,4 @@ int im2_uikit_view_origin(void *view,void *window,Im2Point32 *origin);
 int im2_uikit_view_visible(void *view,void *window);
 
 int im2_uikit_view_accepts_multiple(void *view);
+int im2_uikit_view_exclusive(void *view);

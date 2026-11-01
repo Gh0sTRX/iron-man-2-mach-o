@@ -99,7 +99,13 @@ static int frame(const Im2TouchSample *samples,size_t count,uint64_t us,void *wi
   if(!slot){for(size_t j=0;j<IM2_TOUCH_LIMIT;j++)if(!slots[j].tracked){slot=slots+j;break;}if(!slot)goto done;*slot=(Slot){1,samples[i].id,NULL};
    Im2Point32 point;if(!im2_touches_project(samples[i].x,samples[i].y,&point))continue;
    void *target=NULL;if(responder(im2_uikit_hit_test(window,point),&target))goto done;if(!target)continue;
-   int busy=0;for(size_t j=0;j<IM2_TOUCH_LIMIT;j++)if(slots[j].touch && slots[j].touch->view==target)busy=1;
+   int busy=0,exclusive_block=0;
+   for(size_t j=0;j<IM2_TOUCH_LIMIT;j++)if(slots[j].touch){
+    Touch *active=slots[j].touch;
+    if(active->view==target)busy=1;
+    else if(active->window==window && (im2_uikit_view_exclusive(target) || im2_uikit_view_exclusive(active->view)))exclusive_block=1;
+   }
+   if(exclusive_block)continue;
    if(busy && !im2_uikit_view_accepts_multiple(target))continue;
    Im2Point32 origin;if(im2_uikit_view_origin(target,window,&origin))goto done;
    Touch *t=im2_objc_alloc(touch_class,touch_cleanup);if(!t)goto done;

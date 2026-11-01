@@ -45,6 +45,8 @@ static void callback(void *self,const char *sel,void *changed,void *event){
  size_t nested;assert(im2_touches_frame(NULL,0,tick,root_window,&nested)==-1);
 }
 static void never_native(void){assert(!"guest touch method must cross the ARM bridge");}
+static unsigned exclusive_calls;
+static void exclusive_callback(void *self,const char *sel,void *changed,void *event){(void)self;(void)sel;(void)changed;(void)event;exclusive_calls++;}
 static uint32_t bridge(void *imp,uint32_t self,uint32_t sel,uint32_t touches,uint32_t event){assert(imp==(void *)never_native && self && sel && touches && event);guest_calls++;return 0;}
 static size_t samples(const Im2TouchSample *points,size_t count){size_t n;tick+=1000;assert(!im2_touches_frame(points,count,tick,root_window,&n));assert(!temporary || !im2_objc_retain_count(temporary));return n;}
 static void release_held(void){if(held_touch){assert(!im2_objc_release(held_touch));held_touch=NULL;}if(kept_event){assert(!im2_objc_release(kept_event));kept_event=NULL;}}
@@ -80,6 +82,21 @@ int main(void){
  for(int i=0;i<6;i++)six[i].id+=10;
  unsigned ends=counts[IM2_TOUCH_ENDED];assert(samples(six,6)==2 && counts[IM2_TOUCH_ENDED]==ends+1 && last_phase==IM2_TOUCH_BEGAN && last_all==12);
  assert(samples(NULL,0)==1);release_held();
+ /* Exclusive views block new competing responders in the same window, in
+  * either acquisition order; ordinary sibling views may receive both contacts. */
+ Im2MethodSpec em[4];for(int i=0;i<4;i++){em[i]=methods[i];em[i].imp=(Im2Imp)exclusive_callback;}
+ Im2ObjcClass *ec=im2_objc_register_class("ExclusiveTouchTest",im2_objc_class_named("UIView"),36,em,4,NULL,0);assert(ec);
+ void *left=im2_objc_alloc(ec,destroy),*right=im2_objc_alloc(ec,destroy);assert(left && right);
+ frame_init(left,(Im2Rect32){0,0,160,480});frame_init(right,(Im2Rect32){160,0,160,480});add(root_window,left);add(root_window,right);
+ flag(left,"setExclusiveTouch:",1);assert(im2_uikit_view_exclusive(left));
+ Im2TouchSample pair[]={{21,479.5f,400},{22,479.5f,140}};
+ assert(im2_touches_project(pair[0].x,pair[0].y,&projected) && im2_uikit_hit_test(root_window,projected)==left);
+ assert(im2_touches_project(pair[1].x,pair[1].y,&projected) && im2_uikit_hit_test(root_window,projected)==right);
+ exclusive_calls=0;assert(samples(pair,2)==1 && exclusive_calls==1);assert(samples(NULL,0)==1);
+ exclusive_calls=0;assert(samples(pair+1,1)==1);assert(samples(pair,2)==0 && exclusive_calls==1);assert(samples(NULL,0)==1);
+ flag(left,"setExclusiveTouch:",0x100);assert(!im2_uikit_view_exclusive(left));
+ exclusive_calls=0;assert(samples(pair,2)==2 && exclusive_calls==2);assert(samples(NULL,0)==2);
+ send0(left,"removeFromSuperview");send0(right,"removeFromSuperview");assert(!im2_objc_release(left) && !im2_objc_release(right));
  /* A real guest class identity must resolve the original callback bridge. */
  send0(game_view,"removeFromSuperview");assert(!im2_objc_release(game_view));
  Im2MethodSpec gm[4];for(int i=0;i<4;i++){gm[i]=methods[i];gm[i].imp=(Im2Imp)never_native;}

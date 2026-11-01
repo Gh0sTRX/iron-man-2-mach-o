@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CLASS_LIMIT 128
-#define METHOD_LIMIT 64
+#define METHOD_LIMIT IM2_OBJC_METHOD_LIMIT
 #define SELECTOR_LIMIT 2048
 #define RW_REALIZED (1u<<31)
 typedef struct { const char *name,*types; Im2Imp imp; } Method;

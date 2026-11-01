@@ -222,14 +222,19 @@ static void *thread_tramp(void *p) {
     return (void *)call_guest(t.fn, (uint32_t)t.arg, 0, 0, 0);
 }
 static int d_pthread_create(pthread_t *thr, const void *darwin_attr, void *fn, void *arg) {
+    if(!thr || !fn)return EINVAL;
     guest_thread *t = malloc(sizeof(*t));
+    if(!t)return ENOMEM;
     t->fn = fn;
     t->arg = arg;
     pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, 512 * 1024); // iOS default 512 KB secondary thread stack
-    int r = pthread_create(thr, &attr, thread_tramp, t);
+    int r=pthread_attr_init(&attr);
+    if(r){free(t);return r;}
+    r=pthread_attr_setstacksize(&attr, 512 * 1024); // iOS default 512 KB secondary thread stack
+    if(r){pthread_attr_destroy(&attr);free(t);return r;}
+    r = pthread_create(thr, &attr, thread_tramp, t);
     pthread_attr_destroy(&attr);
+    if(r)free(t);
     l_info("pthread_create(0x%08X) -> %d", (unsigned)fn - macho_get_runtime_slide(), r);
     return r;
 }

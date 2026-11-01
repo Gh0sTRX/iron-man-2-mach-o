@@ -4,8 +4,8 @@
 Runs unmodified owner instructions against the linked compatibility ELF in
 Unicorn. Unsupported bindings are trap tokens, not successful implementations.
 Uses the production relocation planner, constructor validator and call_guest.
-The regression fixture models heap, OS services and GPU entrypoints; main is
-never called. No input bytes are copied to the output report.
+The regression fixture models heap, OS services and GPU entrypoints. Main is
+opt-in and unsupported imports still trap. No input bytes enter the report.
 """
 import argparse
 import hashlib
@@ -51,6 +51,22 @@ def image_tables(data):
     return segments, indirect, constructors, sym, dys
 
 
+def image_sections(data):
+    offset = 28
+    result = []
+    for _ in range(struct.unpack_from('<I', data, 16)[0]):
+        command, length = struct.unpack_from('<II', data, offset)
+        if command == 1:
+            for index in range(struct.unpack_from('<I', data, offset+48)[0]):
+                at = offset+56+index*68
+                name = data[at:at+16].split(b'\0')[0].decode('ascii')
+                segment = data[at+16:at+32].split(b'\0')[0].decode('ascii')
+                va, size = struct.unpack_from('<II', data, at+32)
+                result.append((name, segment, va, size))
+        offset += length
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--elf', type=Path, required=True)
@@ -62,12 +78,21 @@ def main():
                         help='After successful constructors, run their real registered cleanup callbacks')
     parser.add_argument('--initialize-frameworks', action='store_true',
                         help='Reset regression state and run real objc_init with explicit OS fixtures')
+    parser.add_argument('--register-metadata', action='store_true',
+                        help='Register original ObjC classes and CFStrings using production validators')
+    parser.add_argument('--probe-main', action='store_true',
+                        help='Bounded diagnostic main probe; unresolved class references remain traps')
     args = parser.parse_args()
     if args.instruction_budget <= 0:
         parser.error('instruction budget must be positive')
+    if args.register_metadata and not args.initialize_frameworks:
+        parser.error('--register-metadata requires --initialize-frameworks')
+    if args.probe_main and not args.register_metadata:
+        parser.error('--probe-main requires --register-metadata')
     data = args.macho.read_bytes()
     pre = preflight(data, args.rbs1.read_bytes())
     segments, indirect, initializer_slots, sym, dys = image_tables(data)
+    owner_sections = image_sections(data)
     old_argv = sys.argv
     try:
         sys.argv = [str(ROOT/'tests/test_arm_runtime_bridges.py'), '--elf', str(args.elf.resolve())]
@@ -129,7 +154,23 @@ def main():
         try:
             u.emu_start(symbols[name], g['STOP'], count=args.instruction_budget)
         except Exception as ex:
-            raise RuntimeError(f'{name}: PC={u.reg_read(UC_ARM_REG_PC):x} LR={u.reg_read(UC_ARM_REG_LR):x}') from ex
+            detail = ''
+            if u.reg_read(UC_ARM_REG_PC) == (symbols['fatal_error'] & ~1):
+                values = []
+                for register in reg:
+                    pointer = u.reg_read(register)
+                    text = bytearray()
+                    try:
+                        for index in range(256):
+                            byte = bytes(u.mem_read(pointer+index, 1))
+                            if byte == b'\0':
+                                break
+                            text.extend(byte)
+                        values.append(text.decode('utf-8'))
+                    except Exception:
+                        values.append(hex(pointer))
+                detail = ' fatal arguments='+repr(values)
+            raise RuntimeError(f'{name}: PC={u.reg_read(UC_ARM_REG_PC):x} LR={u.reg_read(UC_ARM_REG_LR):x}'+detail) from ex
         if u.reg_read(UC_ARM_REG_PC) != g['STOP']:
             raise RuntimeError('Instruction budget exhausted or diagnostic trap')
         if u.reg_read(UC_ARM_REG_SP) != sp or u.reg_read(UC_ARM_REG_R9) != 0x12345678:
@@ -141,8 +182,13 @@ def main():
             'sceKernelLockMutex', 'sceKernelUnlockMutex', 'sceKernelDeleteMutex')}
         identity_addresses = {symbols[name] & ~1 for name in (
             'sceKernelCreateMutex', 'sceKernelGetThreadId')}
+        fixture_process_us = [1_000_000]
         def framework_os(uc, address, size, context):
-            if address in mutex_addresses:
+            if address == (symbols['sceKernelGetProcessTimeWide'] & ~1):
+                fixture_process_us[0] += 1000
+                uc.reg_write(UC_ARM_REG_R0, fixture_process_us[0] & 0xffffffff)
+                uc.reg_write(UC_ARM_REG_R1, fixture_process_us[0] >> 32)
+            elif address in mutex_addresses:
                 uc.reg_write(UC_ARM_REG_R0, 0)  # Single-thread fixture, no OS scheduling.
             elif address in identity_addresses:
                 uc.reg_write(UC_ARM_REG_R0, 1)
@@ -171,7 +217,7 @@ def main():
         u.hook_add(UC_HOOK_CODE, framework_os)
         native('darwin_init', [])
         native('objc_init', [])
-        for index in range(67):
+        for index in range(struct.unpack('<I', u.mem_read(symbols['objc_class_imports_count'], 4))[0]):
             name, target, kind = struct.unpack('<III', u.mem_read(symbols['class_imports']+12*index, 12))
             if not name or not target or kind != 1:
                 raise RuntimeError('Production framework data binding is not initialized')
@@ -232,7 +278,7 @@ def main():
         'unbound_symbols_in_fixture': missing,
         'frameworks_initialized': args.initialize_frameworks,
         'framework_data_bindings': framework_bindings,
-        'framework_os_fixtures': 'Turkish language, absent fresh-install preferences, single-thread kernel mutex/thread identity fixtures' if args.initialize_frameworks else None,
+        'framework_os_fixtures': 'Turkish language, absent preferences, single-thread mutex/identity and deterministic monotonic process clock; no physical OS services' if args.initialize_frameworks else None,
         'unbound_class_note': 'Real objc_init ran; methods remain partial.' if args.initialize_frameworks else 'Fixture does not call full objc_init; unbound class names are not an implementation audit.',
         'constructors_available': len(initializer_slots), 'constructors_entered': [],
         'constructors_returned': 0, 'imports_called': trace,
@@ -241,6 +287,7 @@ def main():
     failure = None
     phase = 'relocation'
     map_callback, resolve_callback, init_callback, init_return = (control+i*64 for i in range(4))
+    metadata_read = control+256
     # After call_guest returns, restore the native initializer callback's frame.
     u.mem_write(init_return, struct.pack('<3I', 0xe59de008, 0xe28dd010, 0xe12fff1e))
 
@@ -258,7 +305,14 @@ def main():
                '___cxa_rethrow', '___cxa_begin_catch', '___cxa_end_catch'}
 
     def code_hook(uc, address, size, context):
-        if address == map_callback:
+        if address == metadata_read:
+            va, length, executable = (uc.reg_read(r) for r in reg[1:])
+            allowed = any(lo <= va and va+length <= hi for lo, hi in ranges)
+            if executable:
+                allowed = allowed and any(name == '__text' and start <= va and va+length <= start+size
+                                          for name, segment, start, size in owner_sections)
+            returned(va if allowed else 0)
+        elif address == map_callback:
             va = uc.reg_read(UC_ARM_REG_R1)
             returned(va if any(lo <= va <= hi-4 for lo, hi in ranges) else 0)
         elif address == resolve_callback:
@@ -291,6 +345,15 @@ def main():
                               'constructor': len(report['constructors_entered']), 'phase': phase})
             if name in blocked:
                 fail('unsupported_or_placeholder_operation', symbol=name)
+            if name == '_pthread_create':
+                fail('native_thread_creation_boundary', symbol=name,
+                     start_routine=hex(uc.reg_read(UC_ARM_REG_R2)),
+                     argument=hex(uc.reg_read(UC_ARM_REG_R3)),
+                     note='Single-thread diagnostic has no OS thread scheduler; production callback bridge is not replaced by fake success.')
+            if name.startswith('_objc_msgSend'):
+                receiver = uc.reg_read(UC_ARM_REG_R0)
+                if trap_base <= receiver < trap_base+0x10000:
+                    fail('unbound_class_receiver', symbol=trap_names.get(receiver & ~63, 'unknown'))
 
     def token_access(uc, access, address, size, value, context):
         fail('unbound_import_data_access', symbol=trap_names.get(address & ~63, 'unknown'),
@@ -319,6 +382,38 @@ def main():
                 u.mem_write(va+j*4, struct.pack('<I', bindings[index]))
                 patched += 1
         report['external_indirect_slots_applied'] = patched
+        if args.register_metadata:
+            phase = 'metadata'
+            report['guest_classes_registered'] = 0
+            report['guest_cfstrings_registered'] = 0
+            references = []
+            for name, segment, va, size in owner_sections:
+                if name == '__objc_catlist' and size:
+                    raise RuntimeError('Objective-C categories require actual method merging')
+                if name not in ('__objc_classlist', '__objc_classrefs', '__objc_superrefs', '__cfstring'):
+                    continue
+                width = 16 if name == '__cfstring' else 4
+                if segment != '__DATA' or size % width or not any(lo <= va and va+size <= hi for lo, hi in ranges):
+                    raise RuntimeError('Invalid metadata section bounds')
+                if name == '__objc_classlist':
+                    result = native('im2_objc_register_guest_list', [va, size//4, metadata_read, 0, error, 512])
+                    if result:
+                        raise RuntimeError(bytes(u.mem_read(error, 512)).split(b'\0')[0].decode())
+                    report['guest_classes_registered'] += size//4
+                elif name in ('__objc_classrefs', '__objc_superrefs'):
+                    references.append((va, size//4))
+            for name, segment, va, size in owner_sections:
+                if name == '__cfstring':
+                    result = native('im2_foundation_register_cfstrings', [va, size//16, metadata_read, 0, error, 512])
+                    if result:
+                        raise RuntimeError(bytes(u.mem_read(error, 512)).split(b'\0')[0].decode())
+                    report['guest_cfstrings_registered'] += size//16
+            report['guest_reference_validation_errors'] = []
+            for va, count in references:
+                if native('im2_objc_validate_guest_refs', [va, count, metadata_read, 0, error, 512]):
+                    report['guest_reference_validation_errors'].append(bytes(u.mem_read(error, 512)).split(b'\0')[0].decode())
+            if report['guest_reference_validation_errors'] and not args.probe_main:
+                raise RuntimeError('Guest class reference validation failed; see recorded errors')
         functions = allocate(len(initializer_slots)*4)
         for i, va in enumerate(initializer_slots):
             u.mem_write(functions+i*4, bytes(u.mem_read(va, 4)))
@@ -332,6 +427,19 @@ def main():
         report['registered_exit_callbacks'] = native('im2_exit_pending', [])
         report['exit_callbacks_entered'] = 0
         report['exit_callbacks_drained'] = False
+        if args.probe_main:
+            phase = 'main'
+            candidates = [bindings[i] for i, name in enumerate(names) if name == '_main' and i in bindings]
+            if len(candidates) != 1 or not any(name == '__text' and start <= (candidates[0] & ~1) < start+size
+                                             for name, segment, start, size in owner_sections):
+                raise RuntimeError('No unique valid original _main')
+            argv = allocate(8)
+            arg0 = allocate(16)
+            u.mem_write(arg0, b'IronMan2\0')
+            u.mem_write(argv, struct.pack('<II', arg0, 0))
+            report['main_called'] = True
+            report['main_result'] = native('call_guest', [candidates[0], 1, argv, 0, 0])
+            report['status'] = 'main_returned'
         if args.drain_exit_callbacks:
             phase = 'exit_callbacks'
             native('darwin_run_exit_callbacks', [])
@@ -343,7 +451,7 @@ def main():
                                       'phase': phase,
                                       'pc': hex(u.reg_read(UC_ARM_REG_PC)),
                                       'lr': hex(u.reg_read(UC_ARM_REG_LR))}
-    report['owner_code_executed_in_emulator'] = bool(report['constructors_entered'])
+    report['owner_code_executed_in_emulator'] = bool(report['constructors_entered'] or report['main_called'])
     args.output.write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k: report[k] for k in ('status', 'constructors_available',
                      'constructors_returned', 'main_called', 'physical_vita_verified')}))

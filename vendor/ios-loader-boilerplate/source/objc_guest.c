@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define GUEST_CLASSES 64
-#define GUEST_METHODS 64
+#define GUEST_METHODS IM2_OBJC_METHOD_LIMIT
 typedef struct {
     uint32_t identity,meta,super,meta_super,meta_isa,size,start;
     char *name;

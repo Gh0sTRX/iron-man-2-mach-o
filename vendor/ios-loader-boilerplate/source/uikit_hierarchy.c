@@ -24,15 +24,31 @@ typedef struct UiState {
     Im2Rect32 bounds;
     void *controller_view;
     void *layer; /* strong lifetime, +1 from provider */
+    void *background_color;
     void *parent; /* non-owning; parent retains each child through UiChild */
     UiChild *children;
     int hidden,tag,frame_valid,bounds_valid,needs_layout,needs_display;
-    int interaction_enabled,multiple_touch_enabled;
+    int interaction_enabled,multiple_touch_enabled,exclusive_touch;
     struct UiState *next;
 } UiState;
 
 static Im2ObjcClass *responder,*view,*control,*button,*image_view,
     *view_controller,*navigation_controller,*window_class;
+static Im2ObjcClass *color_class;
+typedef struct {Im2ObjcObject object;float rgba[4];} Color;
+int im2_uikit_color_rgba(const void *color,float out[4]) {
+    if(!out || !color_class || im2_objc_object_class(color)!=color_class)return -1;
+    memcpy(out,((const Color *)color)->rgba,4*sizeof(float));return 0;
+}
+static void *palette_color(void *cls,const char *selector) {
+    if(cls!=color_class)return NULL;
+    Color *color=im2_objc_alloc(color_class,NULL);if(!color)return NULL;
+    float value=!strcmp(selector,"whiteColor")?1.f:0.f;
+    color->rgba[0]=color->rgba[1]=color->rgba[2]=value;
+    color->rgba[3]=!strcmp(selector,"clearColor")?0.f:1.f;
+    if(!im2_objc_autorelease(color)){im2_objc_release(color);return NULL;}
+    return color;
+}
 static UiState *states;
 static pthread_mutex_t state_lock=PTHREAD_MUTEX_INITIALIZER;
 static void (*failure)(const char *);
@@ -77,6 +93,7 @@ static void discard_state(void *owner) {
         }
         if(s->controller_view)im2_objc_release(s->controller_view);
         if(s->layer)im2_objc_release(s->layer);
+        if(s->background_color)im2_objc_release(s->background_color);
         free(s);
     }
 }
@@ -88,6 +105,17 @@ static int kind_of(const void *o,Im2ObjcClass *klass) {
         c=m->superclass;
     }
     return 0;
+}
+static void view_set_background(void *self,const char *selector,void *color) {
+    (void)selector;float rgba[4];
+    if(color && im2_uikit_color_rgba(color,rgba))fail("Unsupported UIView background color");
+    if(color && !im2_objc_retain(color))fail("Unknown UIView background color");
+    UiState *state=state_for(self,1);void *old=state->background_color;
+    state->background_color=color;state->needs_display=1;
+    if(old)im2_objc_release(old);
+}
+static void *view_background(void *self,const char *selector) {
+    (void)selector;UiState *state=state_for(self,0);return state?state->background_color:NULL;
 }
 /* Use a sidecar: never reinterpret unverified guest UIKit ivar bytes. */
 static IM2_UIKIT_PCS uintptr_t view_init_frame(void *self,const char *selector,Im2Rect32 frame) {
@@ -186,6 +214,8 @@ static void view_interaction(void *self,const char *sel,uint32_t enabled){(void)
 static uint32_t view_interaction_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->interaction_enabled:1;}
 static void view_multiple(void *self,const char *sel,uint32_t enabled){(void)sel;if(!kind_of(self,view))fail("Not a UIView");state_for(self,1)->multiple_touch_enabled=(uint8_t)enabled!=0;}
 static uint32_t view_multiple_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->multiple_touch_enabled:0;}
+static void view_exclusive(void *self,const char *sel,uint32_t enabled){(void)sel;if(!kind_of(self,view))fail("Not a UIView");state_for(self,1)->exclusive_touch=(uint8_t)enabled!=0;}
+static uint32_t view_exclusive_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->exclusive_touch:0;}
 static void view_set_tag(void *self,const char *selector,int tag) {
     (void)selector;
     if(!kind_of(self,view))fail("setTag: receiver is not UIView");
@@ -310,6 +340,10 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
     size_t checkpoint=im2_objc_registration_checkpoint();
     failure=on_failure;
     responder=reg("UIResponder",nsobject,sizeof(Im2ObjcObject),NULL,0);
+    const Im2MethodSpec colors[]={METHOD("blackColor","@@:",palette_color),
+        METHOD("whiteColor","@@:",palette_color),METHOD("clearColor","@@:",palette_color)};
+    color_class=im2_objc_register_class("UIColor",nsobject,sizeof(Color),NULL,0,colors,3);
+    if(!color_class){(void)im2_objc_registration_rollback(checkpoint);responder=NULL;return -1;}
     const Im2MethodSpec vm[]={
         METHOD("initWithFrame:","@@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_init_frame),
         METHOD("setFrame:","v@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_set_frame),
@@ -317,6 +351,8 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         {"bounds","{CGRect={CGPoint=ff}{CGSize=ff}}@:",(Im2Imp)view_get_bounds,sizeof(Im2Rect32)},
         METHOD("setBounds:","v@:{CGRect={CGPoint=ff}{CGSize=ff}}",view_set_bounds),
         METHOD("layer","@@:",view_layer),
+        METHOD("setBackgroundColor:","v@:@",view_set_background),
+        METHOD("backgroundColor","@@:",view_background),
         METHOD("setNeedsLayout","v@:",view_set_needs_layout),
         METHOD("setNeedsDisplay","v@:",view_set_needs_display),
         METHOD("setHidden:","v@:c",view_set_hidden),
@@ -325,6 +361,8 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         METHOD("isUserInteractionEnabled","c@:",view_interaction_get),
         METHOD("setMultipleTouchEnabled:","v@:c",view_multiple),
         METHOD("isMultipleTouchEnabled","c@:",view_multiple_get),
+        METHOD("setExclusiveTouch:","v@:c",view_exclusive),
+        METHOD("isExclusiveTouch","c@:",view_exclusive_get),
         METHOD("setTag:","v@:i",view_set_tag),
         METHOD("tag","i@:",view_tag),
         METHOD("addSubview:","v@:@",view_add_subview),
@@ -351,7 +389,7 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
     if(!window_class || !navigation_controller || !image_view || !button) {
         (void)im2_objc_registration_rollback(checkpoint);
         responder=view=control=button=image_view=view_controller=
-            navigation_controller=window_class=NULL;
+            navigation_controller=window_class=color_class=NULL;
         return -1;
     }
     return 0;
@@ -396,3 +434,4 @@ void *im2_uikit_hit_test(void *window,Im2Point32 point){
 }
 
 int im2_uikit_view_accepts_multiple(void *self){return kind_of(self,view)?(int)view_multiple_get(self,NULL):0;}
+int im2_uikit_view_exclusive(void *self){return kind_of(self,view)?(int)view_exclusive_get(self,NULL):0;}
