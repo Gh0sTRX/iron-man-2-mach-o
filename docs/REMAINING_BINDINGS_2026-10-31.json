@@ -1,8 +1,8 @@
 {
   "original_imports": 490,
-  "loader_table_names": 450,
-  "matched_original_imports": 339,
-  "unresolved_original_imports": 151,
+  "loader_table_names": 455,
+  "matched_original_imports": 344,
+  "unresolved_original_imports": 146,
   "unresolved_symbols": [
     "_CC_MD5",
     "_CFRunLoopRunInMode",
@@ -129,11 +129,6 @@
     "_opendir",
     "_perror",
     "_printf",
-    "_pthread_cancel",
-    "_pthread_join",
-    "_pthread_mutex_trylock",
-    "_pthread_setcanceltype",
-    "_pthread_testcancel",
     "_putchar",
     "_readdir",
     "_realpath$DARWIN_EXTSN",
