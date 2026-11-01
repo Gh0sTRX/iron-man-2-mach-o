@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "date_istanbul": "2026-11-01",
+  "baseline_commit": "038be4b",
+  "implementation_commit": "9db014fddc6c5c5561999f90bb9ce0eafd5f46e4",
+  "manual_delivery_workflow_commit": "c288dfef904726550e9882c520c8fd5b79c49698",
+  "sdk_image": "vitasdk/vitasdk@sha256:8227da1b596d981f4513cd9b36bda1e43857f6dae5bcf4312c1cd40167f7d9bb",
+  "libvitagl_sha256": "2b7d19510b72fe8e68d32450f247aaf7dc4eedd457ce0850b0dcc351a2ea94f4",
+  "host_asan_ubsan_passed": true,
+  "real_macho_load_bounds_failure_injection_tests_passed": true,
+  "vm_own_code_generator_bounds_test_passed": true,
+  "unicorn_own_vm_code_calls_passed": 6,
+  "unicorn_production_dispatch_cases_passed": 25,
+  "unicorn_uikit_abi_cases_passed": 6,
+  "unicorn_runtime_bridge_test_groups_passed": 37,
+  "synthetic_startup_replay_passed": true,
+  "normal_loader_elf_linked": true,
+  "vitagl_probe_elf_linked": true,
+  "vm_probe_elf_linked": true,
+  "normal_loader_elf_sha256": "2e40146802560ce4ff03288eaa687b61a6cfdce92b718818998153c87040fbff",
+  "local_diagnostic_packages": [
+    {
+      "path": "build/device-diagnostics/im2-vitagl-diagnostic.vpk",
+      "sha256": "a91d3321ec8d418f93ba955e9f13a3e8e742f26af01c2b682f2226ee647b13e1",
+      "bytes": 379308
+    },
+    {
+      "path": "build/device-diagnostics/im2-vm-diagnostic.vpk",
+      "sha256": "c9d9ac543e458ab1853d42961e02779de0cc3afa60fb78e19fd4e51fef387797",
+      "bytes": 45566
+    }
+  ],
+  "vpk_contents_allowlist": [
+    "eboot.bin",
+    "sce_sys/param.sfo"
+  ],
+  "diagnostic_vpk_contents_and_identity_verified": true,
+  "physical_device_access_configured": false,
+  "physical_vita_test_performed": false,
+  "user_physical_device_attestation_received": false,
+  "device_runtime_reports_received": false,
+  "native_vitagl_framebuffer_verified": false,
+  "native_vitagl_pixels_verified": false,
+  "native_rgb565_depth16_precision_verified": false,
+  "native_vm_allocation_verified": false,
+  "native_execution_permissions_verified": false,
+  "native_instruction_cache_verified": false,
+  "native_per_page_rx_verified": false,
+  "gpu_success_mock_used": false,
+  "native_vm_success_mock_used": false,
+  "own_instruction_bytes_emulated_only": true,
+  "original_game_executed_this_step": false,
+  "production_execution_gate_opened": false,
+  "IM2_ALLOW_UNVERIFIED_VM_EXEC_enabled": false,
+  "gles_eagl_ready_worker_barrier_changed": false,
+  "game_vpk_created": false,
+  "default_ci_packages_diagnostics": false,
+  "manual_diagnostic_artifact_delivery_enabled": true,
+  "source_ci": {
+    "run_id": 41312798523,
+    "conclusion": "success"
+  },
+  "standalone_vm_compile_ci": {
+    "run_id": 41312798578,
+    "conclusion": "success"
+  },
+  "default_push_ci": {
+    "run_id": 41313074473,
+    "conclusion": "success",
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41313074473",
+    "diagnostic_package_step": "skipped"
+  },
+  "manual_delivery_ci": {
+    "run_id": 41313074796,
+    "conclusion": "success",
+    "url": "https://github.com/Gh0sTRX/iron-man-2-mach-o/actions/runs/41313074796",
+    "artifact_id": 13085473291,
+    "artifact_name": "im2-device-diagnostics-c288dfef904726550e9882c520c8fd5b79c49698",
+    "artifact_retention_days": 30
+  },
+  "limitations": [
+    "No physical device/runtime evidence received; emulator CPU checks are not native VM/cache evidence.",
+    "OES format metadata and depth occlusion do not independently prove native storage precision.",
+    "VM-domain execution test does not test per-page RX/W^X or closed-domain NX.",
+    "Production image/thunk native memory and worker/EAGL context ownership still need separate integration validation."
+  ],
+  "delivered_diagnostic_packages": [
+    {
+      "path": "build/device-delivery/im2-vitagl-diagnostic.vpk",
+      "sha256": "7cc46cc194bc5b963d8053cb9b6b605a23b1832f81571ab3b20c3094ab55ef39",
+      "bytes": 379308
+    },
+    {
+      "path": "build/device-delivery/im2-vm-diagnostic.vpk",
+      "sha256": "ae9106b924a34dd5921b830f16ec6094ab89d690b217fa6e0af1bb754fea3177",
+      "bytes": 45566
+    }
+  ],
+  "github_artifact_download_checksum_verified": true
+}

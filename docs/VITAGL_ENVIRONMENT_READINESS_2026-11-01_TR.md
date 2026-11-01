@@ -1,5 +1,7 @@
 # VitaGL ortam doğrulaması — 1 Kasım 2026
 
+Bu sayfa `b7a0d41` aşamasının tarihsel kaydıdır. Sonraki ayrı SELF/VPK hazırlığı, VM deneyi ve güncel cihaz durumu için [DEVICE_TEST_STATUS.md](DEVICE_TEST_STATUS.md) dosyasına bakın. Fiziksel doğrulama hâlâ yapılmadı.
+
 Gerçek Vita/GPU hazırlığı **henüz doğrulanmadı**. Bulut ortamında erişilebilir fiziksel Vita bağlantısı veya cihazdan alınmış tanılama sonucu bulunmuyor. Bu nedenle özgün oyunun `gles_eagl_ready` sınırı aşılmadı; sahte başarı döndürülmedi.
 
 ## Doğrulanan küçük adım
