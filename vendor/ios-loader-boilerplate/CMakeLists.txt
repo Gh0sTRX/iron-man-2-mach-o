@@ -20,8 +20,15 @@ foreach(_header "kubridge.h" "vitaGL.h")
   endif()
 endforeach()
 
+option(IM2_VITAGL_ENV_PROBE "Use the asset-free native VitaGL diagnostic entry (ELF only)" OFF)
+set(_entry_source source/main.c)
+set(_elf_target im2_ios_loader)
+if(IM2_VITAGL_ENV_PROBE)
+  set(_entry_source "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/vitagl_environment_probe/main.c")
+  set(_elf_target im2_vitagl_environment_probe)
+endif()
 add_library(im2_ios_loader_objects OBJECT
-  source/main.c
+  ${_entry_source}
   source/darwin_printf.c
   source/console_printf.c
   source/macho.c
@@ -85,9 +92,9 @@ message(STATUS "Loader object compilation only. Link, RX validation and VPK are 
 # Link the actual complete loader without creating SELF or VPK.
 option(IM2_LINK_LOADER "Link full research loader ELF" OFF)
 if(IM2_LINK_LOADER)
-  add_executable(im2_ios_loader $<TARGET_OBJECTS:im2_ios_loader_objects>)
-  target_link_options(im2_ios_loader PRIVATE -Wl,-q -Wl,-Map=${CMAKE_BINARY_DIR}/im2_ios_loader.map)
-  target_link_libraries(im2_ios_loader PRIVATE
+  add_executable(${_elf_target} $<TARGET_OBJECTS:im2_ios_loader_objects>)
+  target_link_options(${_elf_target} PRIVATE -Wl,-q -Wl,-Map=${CMAKE_BINARY_DIR}/${_elf_target}.map)
+  target_link_libraries(${_elf_target} PRIVATE
     -Wl,--whole-archive pthread -Wl,--no-whole-archive
     vitaGL vitashark SceShaccCgExt stdc++ mathneon freetype png16 z bz2 m
     kubridge_stub taihen_stub SceShaccCg_stub

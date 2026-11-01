@@ -4,7 +4,7 @@ set -euo pipefail
 : "${VITASDK:?Set VITASDK}"
 cmake -S vendor/ios-loader-boilerplate -B build/loader-full \
   -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake" \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DIM2_LINK_LOADER=ON
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DIM2_LINK_LOADER=ON -DIM2_VITAGL_ENV_PROBE=OFF
 cmake --build build/loader-full --parallel 2
 arm-vita-eabi-readelf -h build/loader-full/im2_ios_loader
 # Optional weak toolchain hooks are permitted. Strong undefined symbols are errors.
