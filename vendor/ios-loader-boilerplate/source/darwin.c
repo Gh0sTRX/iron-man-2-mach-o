@@ -24,6 +24,8 @@
 #include "darwin.h"
 #include "exit_registry.h"
 #include "thread_lifecycle.h"
+#include "fs_path.h"
+#include "console_printf.h"
 #include "foundation.h"
 #include "hle.h"
 #include "imports.h"
@@ -34,26 +36,21 @@
 
 // Paths created by the game (NSHomeDirectory, bundle) are redirected to DATA_PATH.
 const char *darwin_path(const char *in, char *out, size_t outlen) {
-    if (!strncmp(in, "ux0:", 4) || !strncmp(in, "ur0:", 4) || !strncmp(in, "app0:", 5)) {
-        snprintf(out, outlen, "%s", in);
-        return out;
-    }
-    while (*in == '/')
-        in++;
-    snprintf(out, outlen, DATA_PATH "%s", in);
-    return out;
+    return im2_fs_path(in,out,outlen);
 }
 
 static FILE *d_fopen(const char *path, const char *mode) {
-    char p[512];
-    FILE *f = fopen(darwin_path(path, p, sizeof(p)), mode);
+    char p[IM2_FS_PATH_MAX+1];
+    if(!darwin_path(path,p,sizeof(p)))return NULL;
+    FILE *f = fopen(p, mode);
     l_info("fopen(%s, %s) -> %p", p, mode, f);
     return f;
 }
 
 static int d_mkdir(const char *path, int mode) {
-    char p[512];
-    return mkdir(darwin_path(path, p, sizeof(p)), mode);
+    char p[IM2_FS_PATH_MAX+1];
+    if(!darwin_path(path,p,sizeof(p)))return -1;
+    return mkdir(p, mode);
 }
 
 // ---------------------------------------------------------------- stdio / errno / _chk
@@ -411,12 +408,14 @@ const import_entry darwin_imports[] = {
     D(strchr), D(strrchr), D(strcat), D(strncat), D(strncmp), D(strcspn),
     D(strpbrk), D(strtol), D(strtoul), D(strerror), D(strdup),
     D(atoi), D(rand), D(srand), F(sprintf, d_sprintf), F(vsprintf, d_vsprintf),
+    F(printf, im2_console_printf),
     F(vsnprintf, d_vsnprintf), D(sscanf), D(puts),
     F(qsort, d_qsort), F(_ZdlPv, free),
     F(__memcpy_chk, d___memcpy_chk), F(__strcpy_chk, d___strcpy_chk),
     F(__sprintf_chk, d___sprintf_chk), F(__assert_rtn, d___assert_rtn), F(__error, d___error),
     F(NSLog, d_NSLog),
     // stdio
+    F(chdir, im2_fs_chdir), F(getcwd, im2_fs_getcwd),
     F(fopen, d_fopen), D(fclose), D(fread), D(fwrite), D(fseek), D(ftell), D(feof), D(ferror),
     D(fflush), D(fputs), F(mkdir, d_mkdir), D(close), V(__stderrp, &d_stderrp),
     V(__stdinp, &d_stdinp),
@@ -472,6 +471,7 @@ static void guest_exit_call(void *ctx,uintptr_t fn,uintptr_t arg,int has_arg){
 }
 void darwin_run_exit_callbacks(void){if(im2_exit_run())fatal_error("Guest exit callback drain failed");}
 void darwin_init(void) {
+    if(im2_fs_init(DATA_PATH))fatal_error("Guest filesystem root initialization failed");
     if(im2_exit_init(guest_exit_call,NULL))fatal_error("Guest exit registry initialization failed");
     d_stderrp = stderr;
     d_stdinp = stdin;

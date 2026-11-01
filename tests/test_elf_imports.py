@@ -233,3 +233,6 @@ print('PASS: thread lifecycle imports route through Darwin enum/result/error ada
 assert darwin_entries['_pthread_mutex_trylock']==(symbols['d_pthread_mutex_trylock'],0)
 assert entries['_CFRunLoopRunInMode']==(symbols['im2_cf_runloop_run'],0)
 assert entries['_kCFRunLoopDefaultMode']==(symbols['im2_cf_default_mode'],1)
+assert darwin_entries['_chdir']==(symbols['im2_fs_chdir'],0)
+assert darwin_entries['_getcwd']==(symbols['im2_fs_getcwd'],0)
+assert darwin_entries['_printf']==(symbols['im2_console_printf'],0)

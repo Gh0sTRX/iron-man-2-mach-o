@@ -84,6 +84,8 @@ def main():
                         help='Bounded diagnostic main probe; unresolved class references remain traps')
     parser.add_argument('--probe-worker', action='store_true',
                         help='After main requests a thread, probe its entry with a separate stack/TLS; stop at synchronization')
+    parser.add_argument('--app-dir', type=Path,
+                        help='Private extracted app directory for real read-only stat checks; no virtual directory success is guessed')
     args = parser.parse_args()
     if args.instruction_budget <= 0:
         parser.error('instruction budget must be positive')
@@ -93,6 +95,8 @@ def main():
         parser.error('--probe-main requires --register-metadata')
     if args.probe_worker and not args.probe_main:
         parser.error('--probe-worker requires --probe-main')
+    if args.app_dir and (not args.initialize_frameworks or not args.app_dir.is_dir()):
+        parser.error('--app-dir requires --initialize-frameworks and an existing private app directory')
     data = args.macho.read_bytes()
     pre = preflight(data, args.rbs1.read_bytes())
     segments, indirect, initializer_slots, sym, dys = image_tables(data)
@@ -159,7 +163,7 @@ def main():
         try:
             u.emu_start(symbols[name], g['STOP'], count=args.instruction_budget)
         except Exception as ex:
-            detail = ''
+            detail = ' '+str(ex)
             if u.reg_read(UC_ARM_REG_PC) == (symbols['fatal_error'] & ~1):
                 values = []
                 for register in reg:
@@ -183,13 +187,26 @@ def main():
         return u.reg_read(UC_ARM_REG_R0)
 
     if args.initialize_frameworks:
+        filesystem_checks = []
+        console_output = []
+        console_stream = [None]
+        app_directory = args.app_dir.resolve() if args.app_dir else None
+        virtual_root = [None]
+        stat_size, mode_offset, mode_size = struct.unpack('<III', g['read'](symbols['im2_fs_stat_layout'], 12))
         mutex_addresses = {symbols[name] & ~1 for name in (
             'sceKernelLockMutex', 'sceKernelUnlockMutex', 'sceKernelDeleteMutex')}
         identity_addresses = {symbols[name] & ~1 for name in (
             'sceKernelCreateMutex', 'sceKernelGetThreadId')}
         fixture_process_us = [1_000_000]
         def framework_os(uc, address, size, context):
-            if address == (symbols['sceKernelGetProcessTimeWide'] & ~1):
+            if address == (symbols['fwrite'] & ~1):
+                width,count=uc.reg_read(UC_ARM_REG_R1),uc.reg_read(UC_ARM_REG_R2)
+                if uc.reg_read(UC_ARM_REG_R3)!=console_stream[0] or width*count>1024*1024:
+                    raise AssertionError('Unmodeled file write in owner diagnostic')
+                data=bytes(uc.mem_read(uc.reg_read(UC_ARM_REG_R0),width*count)) if width*count else b''
+                console_output.append({'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'text':data.decode('utf-8',errors='replace')})
+                uc.reg_write(UC_ARM_REG_R0,count if width else 0)
+            elif address == (symbols['sceKernelGetProcessTimeWide'] & ~1):
                 fixture_process_us[0] += 1000
                 uc.reg_write(UC_ARM_REG_R0, fixture_process_us[0] & 0xffffffff)
                 uc.reg_write(UC_ARM_REG_R1, fixture_process_us[0] >> 32)
@@ -212,15 +229,40 @@ def main():
                     if value == b'\0':
                         break
                     path.extend(value)
-                if not path.endswith(b'/Library/Preferences/com.gameloft.IronMan2.plist'):
+                if path.endswith(b'/Library/Preferences/com.gameloft.IronMan2.plist'):
+                    uc.mem_write(g['OBJECT']+0x2000, struct.pack('<I', 2))
+                    uc.reg_write(UC_ARM_REG_R0, 0xffffffff)
+                elif app_directory and virtual_root[0]:
+                    text = path.decode('utf-8');bundle = virtual_root[0]+'/IronMan2.app'
+                    if text.rstrip('/') == virtual_root[0]:
+                        real_path = app_directory.parent
+                    elif text == bundle or text.startswith(bundle+'/'):
+                        real_path = (app_directory/text[len(bundle):].lstrip('/')).resolve()
+                        if real_path != app_directory and app_directory not in real_path.parents:
+                            raise AssertionError('Owner filesystem path escapes provided app directory')
+                    else:
+                        raise AssertionError('Unmodeled owner stat path: '+text)
+                    try:
+                        info = real_path.stat();output = bytearray(stat_size)
+                        struct.pack_into('<I' if mode_size == 4 else '<H', output, mode_offset, info.st_mode)
+                        uc.mem_write(uc.reg_read(UC_ARM_REG_R1), bytes(output));uc.reg_write(UC_ARM_REG_R0, 0)
+                        filesystem_checks.append({'path': text, 'result': 'real_stat', 'directory': real_path.is_dir()})
+                    except OSError as ex:
+                        native_errno = ex.errno if ex.errno in (1,2,5,12,13,20) else 5
+                        uc.mem_write(g['OBJECT']+0x2000, struct.pack('<I', native_errno));uc.reg_write(UC_ARM_REG_R0, 0xffffffff)
+                        filesystem_checks.append({'path': text, 'result': 'real_stat_error', 'errno': native_errno})
+                else:
                     raise AssertionError('Unmodeled stat path: '+repr(bytes(path)))
-                uc.mem_write(g['OBJECT']+0x2000, struct.pack('<I', 2))
-                uc.reg_write(UC_ARM_REG_R0, 0xffffffff)
             else:
                 return
             uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
         u.hook_add(UC_HOOK_CODE, framework_os)
         native('darwin_init', [])
+        console_stream[0] = native('im2_console_stdout', [])
+        root_buffer = allocate(4097)
+        if not native('im2_fs_getcwd', [root_buffer, 4097]):
+            raise RuntimeError('Virtual filesystem root unavailable')
+        virtual_root[0] = bytes(u.mem_read(root_buffer,4097)).split(b'\0')[0].decode()
         native('objc_init', [])
         for index in range(struct.unpack('<I', u.mem_read(symbols['objc_class_imports_count'], 4))[0]):
             name, target, kind = struct.unpack('<III', u.mem_read(symbols['class_imports']+12*index, 12))
@@ -288,6 +330,10 @@ def main():
         'constructors_available': len(initializer_slots), 'constructors_entered': [],
         'constructors_returned': 0, 'imports_called': trace,
         'exception_unwinding_verified': False,
+        'owner_app_real_stat_enabled': bool(args.app_dir),
+        'owner_filesystem_checks': filesystem_checks if args.initialize_frameworks else [],
+        'stat_fixture_scope': 'Only st_mode is modeled from real owner files; remaining stat fields are zero. Fresh preferences remain an explicit absent-file fixture.',
+        'console_fixture_output': console_output if args.initialize_frameworks else [],
     }
     failure = None
     phase = 'relocation'
@@ -339,6 +385,9 @@ def main():
             uc.reg_write(UC_ARM_REG_PC, symbols['call_guest'])
         elif address == init_return:
             report['constructors_returned'] += 1
+        elif phase == 'worker' and address == (symbols['gles_eagl_ready'] & ~1):
+            fail('native_graphics_backend_boundary',symbol='gles_eagl_ready',
+                 note='Original worker requested EAGL readiness; production GPU initialization is unavailable in this diagnostic. No ready result is fabricated.')
         elif address == symbols['call_guest'] and phase == 'exit_callbacks':
             report['exit_callbacks_entered'] += 1
         elif trap_base <= address < trap_base+0x10000:

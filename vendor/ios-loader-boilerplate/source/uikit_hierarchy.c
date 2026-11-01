@@ -28,7 +28,7 @@ typedef struct UiState {
     void *parent; /* non-owning; parent retains each child through UiChild */
     UiChild *children;
     int hidden,tag,frame_valid,bounds_valid,needs_layout,needs_display;
-    int interaction_enabled,multiple_touch_enabled,exclusive_touch;
+    int interaction_enabled,multiple_touch_enabled,exclusive_touch,opaque;
     struct UiState *next;
 } UiState;
 
@@ -66,7 +66,7 @@ static UiState *state_for(void *owner,int create) {
     while(s && s->owner!=owner)s=s->next;
     if(!s && create) {
         s=calloc(1,sizeof(*s));
-        if(s){s->owner=owner;s->interaction_enabled=1;s->next=states;states=s;}
+        if(s){s->owner=owner;s->interaction_enabled=1;s->opaque=1;s->next=states;states=s;}
     }
     pthread_mutex_unlock(&state_lock);
     if(!s && create)fail("UIKit state allocation failed");
@@ -216,6 +216,8 @@ static void view_multiple(void *self,const char *sel,uint32_t enabled){(void)sel
 static uint32_t view_multiple_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->multiple_touch_enabled:0;}
 static void view_exclusive(void *self,const char *sel,uint32_t enabled){(void)sel;if(!kind_of(self,view))fail("Not a UIView");state_for(self,1)->exclusive_touch=(uint8_t)enabled!=0;}
 static uint32_t view_exclusive_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->exclusive_touch:0;}
+static void view_opaque(void *self,const char *sel,uint32_t enabled){(void)sel;if(!kind_of(self,view))fail("Not a UIView");UiState *s=state_for(self,1);s->opaque=(uint8_t)enabled!=0;s->needs_display=1;}
+static uint32_t view_opaque_get(void *self,const char *sel){(void)sel;UiState *s=state_for(self,0);return s?s->opaque:1;}
 static void view_set_tag(void *self,const char *selector,int tag) {
     (void)selector;
     if(!kind_of(self,view))fail("setTag: receiver is not UIView");
@@ -363,6 +365,8 @@ int im2_uikit_hierarchy_init(Im2ObjcClass *nsobject,void (*on_failure)(const cha
         METHOD("isMultipleTouchEnabled","c@:",view_multiple_get),
         METHOD("setExclusiveTouch:","v@:c",view_exclusive),
         METHOD("isExclusiveTouch","c@:",view_exclusive_get),
+        METHOD("setOpaque:","v@:c",view_opaque),
+        METHOD("isOpaque","c@:",view_opaque_get),
         METHOD("setTag:","v@:i",view_set_tag),
         METHOD("tag","i@:",view_tag),
         METHOD("addSubview:","v@:@",view_add_subview),

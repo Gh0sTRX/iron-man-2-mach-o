@@ -23,6 +23,7 @@ endforeach()
 add_library(im2_ios_loader_objects OBJECT
   source/main.c
   source/darwin_printf.c
+  source/console_printf.c
   source/macho.c
   source/macho_reloc.c
   source/macho_init.c
@@ -35,6 +36,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/libc_text.c
   source/exit_registry.c
   source/darwin.c
+  source/fs_path.c
   source/objc.c
   source/foundation.c
   source/cfstring.c

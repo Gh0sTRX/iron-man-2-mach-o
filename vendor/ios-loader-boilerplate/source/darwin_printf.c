@@ -10,6 +10,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
 
 #include "darwin_printf.h"
 
@@ -26,7 +27,7 @@ static uint64_t dword(words *w) {
     return (uint64_t)word(w) << 32 | lo;
 }
 
-int darwin_vformat(char *out, size_t size, const char *fmt, words *w) {
+static int format(char *out, size_t size, const char *fmt, words *w,int strict) {
     size_t n = 0; // total length, snprintf semantics (even if truncated)
     char spec[40];
     while (*fmt) {
@@ -53,12 +54,25 @@ int darwin_vformat(char *out, size_t size, const char *fmt, words *w) {
             while (*fmt >= '0' && *fmt <= '9' && k < 24)
                 spec[k++] = *fmt++;
         }
+        const char *length_start=fmt;
         while (*fmt && strchr("hlLqjzt", *fmt)) {
             if (*fmt == 'q' || *fmt == 'j' || (fmt[0] == 'l' && fmt[1] == 'l'))
                 ll = 1;
             fmt += (fmt[0] == 'l' && fmt[1] == 'l') ? 2 : 1;
         }
+        size_t length_size=(size_t)(fmt-length_start);
         char conv = *fmt ? *fmt++ : 0;
+        if(strict){
+            if(!conv || !strchr("diouxXcfFeEgGaAs@p%",conv))return -1;
+            if(length_size){
+                int integer=strchr("diouxX",conv)!=NULL;
+                int floating=strchr("fFeEgGaA",conv)!=NULL;
+                int supported=(length_size==1 && strchr("lqjzt",*length_start)) ||
+                    (length_size==2 && length_start[0]=='l' && length_start[1]=='l');
+                if(!supported || (!integer && !(floating && length_size==1 && *length_start=='l')))return -1;
+            }
+            if(conv=='%' && (k!=1 || length_size))return -1;
+        }
         char *dst = n < size ? out + n : NULL;
         size_t room = n < size ? size - n : 0;
 #define EMIT(v) (nstar == 0 ? snprintf(dst, room, spec, v) \
@@ -94,8 +108,11 @@ int darwin_vformat(char *out, size_t size, const char *fmt, words *w) {
         }
 #undef EMIT
         n += r > 0 ? r : 0;
+        if(strict && (r<0 || n>INT_MAX))return -1;
     }
     if (size)
         out[n < size ? n : size - 1] = 0;
     return n;
 }
+int darwin_vformat(char *out,size_t size,const char *fmt,words *w){return format(out,size,fmt,w,0);}
+int darwin_vformat_strict(char *out,size_t size,const char *fmt,words *w){return format(out,size,fmt,w,1);}

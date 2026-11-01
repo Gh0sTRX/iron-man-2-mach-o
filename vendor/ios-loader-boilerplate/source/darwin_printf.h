@@ -26,6 +26,8 @@ typedef struct {
  * @return Total number of characters that would have been generated, excluding null terminator.
  */
 int darwin_vformat(char *out, size_t size, const char *fmt, words *w);
+/* Reject unsupported/truncated conversions instead of emitting guessed text. */
+int darwin_vformat_strict(char *out,size_t size,const char *fmt,words *w);
 
 /* Installed during Foundation startup; unknown %@ objects must be rejected. */
 void darwin_set_object_string_resolver(const char *(*resolver)(const void *));

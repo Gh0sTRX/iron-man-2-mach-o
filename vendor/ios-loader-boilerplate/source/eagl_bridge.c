@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
     Im2ObjcClass *isa;
     void *properties;
+    uint32_t opaque;
 } EaglLayer;
 
 static Im2ObjcClass *calayer_class,*eagl_layer_class,*context_class;
@@ -56,6 +57,13 @@ static void layer_destroy(void *object) {
     EaglLayer *layer=object;
     if(layer->properties)(void)im2_objc_release(layer->properties);
     layer->properties=NULL;
+}
+static void layer_opaque(void *receiver,const char *sel,uint32_t value){
+    (void)sel;if(!of_class(receiver,calayer_class))abort();
+    ((EaglLayer *)receiver)->opaque=(uint8_t)value!=0;
+}
+static uint32_t layer_opaque_get(void *receiver,const char *sel){
+    (void)sel;if(!of_class(receiver,calayer_class))abort();return ((EaglLayer *)receiver)->opaque;
 }
 static uintptr_t layer_properties(void *receiver,const char *sel) {
     (void)sel;
@@ -174,8 +182,9 @@ int im2_eagl_init(Im2ObjcClass *root,void (*failure)(const char *)) {
        !im2_objc_class_named("NSDictionary"))
         return -1;
     size_t checkpoint=im2_objc_registration_checkpoint();
+    const Im2MethodSpec base_layer[]={METHOD("setOpaque:","v@:c",layer_opaque),METHOD("isOpaque","c@:",layer_opaque_get)};
     calayer_class=im2_objc_register_class("CALayer",root,
-        sizeof(EaglLayer),NULL,0,NULL,0);
+        sizeof(EaglLayer),base_layer,2,NULL,0);
     const Im2MethodSpec lm[]={
         METHOD("drawableProperties","@@:",layer_properties),
         METHOD("setDrawableProperties:","v@:@",layer_set_properties)

@@ -244,3 +244,14 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   vendor/ios-loader-boilerplate/source/cfstring.c \
   vendor/ios-loader-boilerplate/source/objc_runtime.c -lm -o build/host-runtime/test_runloop
 build/host-runtime/test_runloop
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_fs_path.c \
+  vendor/ios-loader-boilerplate/source/fs_path.c -o build/host-runtime/test_fs_path
+build/host-runtime/test_fs_path
+
+cc -std=c11 -Wall -Wextra -Werror -g -no-pie -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -I vendor/ios-loader-boilerplate/source tests/test_console_printf.c \
+  vendor/ios-loader-boilerplate/source/console_printf.c vendor/ios-loader-boilerplate/source/darwin_printf.c \
+  -Wl,--wrap=fwrite,--wrap=malloc -o build/host-runtime/test_console_printf
+build/host-runtime/test_console_printf

@@ -901,6 +901,10 @@ for align in (0,4):
  assert call('_objc_msgSend',[view,text_at(0x6d0,'isExclusiveTouch')],align)==1
  call('_objc_msgSend',[view,text_at(0x6b0,'setExclusiveTouch:'),0x100],align)
  assert call('_objc_msgSend',[view,text_at(0x6d0,'isExclusiveTouch')],align)==0
+ assert call('_objc_msgSend',[view,text_at(0x6f0,'isOpaque')],align)==1
+ call('_objc_msgSend',[view,text_at(0x710,'setOpaque:'),0x100],align)
+ assert call('_objc_msgSend',[view,text_at(0x6f0,'isOpaque')],align)==0
+ call('_objc_msgSend',[view,text_at(0x710,'setOpaque:'),3],align)
  for selector,expected in (('blackColor',(0.,0.,0.,1.)),('whiteColor',(1.,1.,1.,1.)),('clearColor',(0.,0.,0.,0.))):
   color=call('_objc_msgSend',[color_class,text_at(0x650,selector)],align);assert color
   assert call('im2_uikit_color_rgba',[color,scratch+0x800],align)==0
@@ -1087,3 +1091,98 @@ for align in (0,4):
  assert call('im2_objc_pool_drain',[pool],align)==0 and call('im2_objc_retain_count',[target],align)==1
  assert call('im2_objc_release',[target],align)==0
 print(f'PASS: {calls-runloop_start} ARM CFRunLoop/NSTimer calls; measured packed r1/r2 double ABI, borrowed default-mode global, real guest callbacks/r9 preservation, timer-only timeout semantics and cleanup. OS clocks/waits modeled.')
+
+layer_start=calls
+for name in ('im2_collections_init','im2_numbers_init','im2_eagl_init'):
+ entries['__'+name]=(symbols[name],0)
+assert call('im2_collections_init',[root,0])==0
+assert call('im2_numbers_init',[root])==0
+assert call('im2_eagl_init',[root,0])==0
+for align in (0,4):
+ view=call('im2_objc_alloc',[view_class,symbols['view_dealloc']],align);assert view
+ layer=call('_objc_msgSend',[view,text_at(0xe10,'layer')],align);assert layer
+ assert call('_objc_msgSend',[layer,text_at(0xe20,'isOpaque')],align)==0
+ call('_objc_msgSend',[layer,text_at(0xe30,'setOpaque:'),3],align)
+ assert call('_objc_msgSend',[layer,text_at(0xe20,'isOpaque')],align)==1
+ call('_objc_msgSend',[layer,text_at(0xe30,'setOpaque:'),0x100],align)
+ assert call('_objc_msgSend',[layer,text_at(0xe20,'isOpaque')],align)==0
+ assert call('im2_objc_release',[view],align)==0 and call('im2_objc_retain_count',[layer],align)==0
+print(f'PASS: {calls-layer_start} ARM CALayer opacity calls; inherited dispatch, default NO, BOOL low-byte values and owned-layer cleanup. No GPU opacity effect verified.')
+
+fs_start=calls
+for i in range(struct.unpack('<I',read(symbols['darwin_imports_count'],4))[0]):
+ name,target,kind=struct.unpack('<III',read(symbols['darwin_imports']+12*i,12))
+ if cstring(name) in ('_chdir','_getcwd','_fopen','_mkdir'):entries[cstring(name)]=(target,kind)
+entries['__darwin_path']=(symbols['darwin_path'],0)
+entries['__fs_free']=(symbols['free'],0)
+def fs_text(address):
+ data=bytearray()
+ for i in range(4097):
+  byte=bytes(u.mem_read(address+i,1))
+  if not byte:return data.decode()
+  if byte==b'\0':return data.decode()
+  data.extend(byte)
+ raise AssertionError('Unterminated filesystem string')
+out=scratch+0x1000;argument=scratch+0x1300
+assert call('_getcwd',[out,512])==out
+fs_root=fs_text(out);fs_modes={fs_root:0x4000,fs_root+'/IronMan2.app/':0x4000,fs_root+'/IronMan2.app/texture.dat':0x8000}
+stat_size,stat_mode_offset,stat_mode_size=struct.unpack('<III',read(symbols['im2_fs_stat_layout'],12))
+fs_seen=[]
+def fs_native_hook(uc,address,size,context):
+ if address==(symbols['stat']&~1):
+  path=fs_text(uc.reg_read(UC_ARM_REG_R0));fs_seen.append(('stat',path))
+  if path in fs_modes:
+   output=bytearray(stat_size);struct.pack_into('<I' if stat_mode_size==4 else '<H',output,stat_mode_offset,fs_modes[path])
+   uc.mem_write(uc.reg_read(UC_ARM_REG_R1),bytes(output));result=0
+  else:uc.mem_write(OBJECT+0x2000,struct.pack('<I',2));result=0xffffffff
+ elif address==(symbols['fopen']&~1):
+  fs_seen.append(('fopen',fs_text(uc.reg_read(UC_ARM_REG_R0))));result=0 # Controlled failed open, no fake FILE.
+ elif address==(symbols['mkdir']&~1):
+  fs_seen.append(('mkdir',fs_text(uc.reg_read(UC_ARM_REG_R0))));result=0xffffffff
+ else:return
+ uc.reg_write(UC_ARM_REG_R0,result);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+fs_hook=u.hook_add(UC_HOOK_CODE,fs_native_hook)
+for align in (0,4):
+ u.mem_write(argument,(fs_root+'/IronMan2.app/').encode()+b'\0')
+ assert call('_chdir',[argument],align)==0
+ assert call('_getcwd',[out,512],align)==out and fs_text(out)==fs_root+'/IronMan2.app'
+ u.mem_write(argument,b'texture.dat\0')
+ assert call('darwin_path',[argument,out,512],align)==out and fs_text(out)==fs_root+'/IronMan2.app/texture.dat'
+ assert call('_chdir',[argument],align)==0xffffffff and pointer(OBJECT+0x2000)==20
+ u.mem_write(argument,b'missing\0');assert call('_chdir',[argument],align)==0xffffffff and pointer(OBJECT+0x2000)==2
+ put(out,GUARD,GUARD);assert call('_getcwd',[out,1],align)==0 and get(out,2)==(GUARD,GUARD)
+ allocated=call('_getcwd',[0,0],align);assert allocated and fs_text(allocated)==fs_root+'/IronMan2.app';call('fs_free',[allocated],align)
+ u.mem_write(argument,b'/saves/a\0');assert call('darwin_path',[argument,out,512],align)==out and fs_text(out)==fs_root+'/saves/a'
+ u.mem_write(argument,b'relative.dat\0');u.mem_write(argument+128,b'rb\0')
+ assert call('_fopen',[argument,argument+128],align)==0 and fs_seen[-1]==('fopen',fs_root+'/IronMan2.app/relative.dat')
+ assert call('_mkdir',[argument,0o700],align)==0xffffffff and fs_seen[-1]==('mkdir',fs_root+'/IronMan2.app/relative.dat')
+ u.mem_write(argument,fs_root.encode()+b'\0');assert call('_chdir',[argument],align)==0
+u.hook_del(fs_hook)
+print(f'PASS: {calls-fs_start} ARM cwd/path calls; real stat-mode layout, chdir failure preservation, allocated/bounded getcwd and fopen/mkdir routing at both stack alignments. Native filesystem modeled; host test reads real files.')
+
+console_start=calls
+for i in range(struct.unpack('<I',read(symbols['darwin_imports_count'],4))[0]):
+ name,target,kind=struct.unpack('<III',read(symbols['darwin_imports']+12*i,12))
+ if cstring(name)=='_printf':entries['_printf']=(target,kind)
+entries['__console_stdout']=(symbols['im2_console_stdout'],0)
+stdout=call('console_stdout',[]);console_bytes=[];console_short=[False]
+def console_hook(uc,address,size,context):
+ if address!=(symbols['fwrite']&~1):return
+ assert uc.reg_read(UC_ARM_REG_R1)==1 and uc.reg_read(UC_ARM_REG_R3)==stdout
+ n=uc.reg_read(UC_ARM_REG_R2);data=bytes(uc.mem_read(uc.reg_read(UC_ARM_REG_R0),n));console_bytes.append(data)
+ uc.reg_write(UC_ARM_REG_R0,n-1 if console_short[0] else n);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+console_hook_id=u.hook_add(UC_HOOK_CODE,console_hook)
+format_address=scratch+0x1500;string_address=scratch+0x1600;put(scratch+0x1700,GUARD)
+u.mem_write(string_address,b'fixture\0')
+for align in (0,4):
+ u.mem_write(format_address,b'%u %.2f %llx %s\0');lo,hi=words(1.25)
+ expected=b'7 1.25 123456789abcdef0 fixture'
+ assert call('_printf',[format_address,7,lo,hi,0x9abcdef0,0x12345678,string_address],align)==len(expected) and console_bytes[-1]==expected
+ u.mem_write(format_address,b'a%cb\0');assert call('_printf',[format_address,0],align)==3 and console_bytes[-1]==b'a\0b'
+ before=len(console_bytes);u.mem_write(format_address,b'%n\0')
+ assert call('_printf',[format_address,scratch+0x1700],align)==0xffffffff and pointer(scratch+0x1700)==GUARD and len(console_bytes)==before
+ console_short[0]=True;u.mem_write(format_address,b'short\0')
+ assert call('_printf',[format_address],align)==0xffffffff and pointer(OBJECT+0x2000)==5
+ console_short[0]=False
+u.hook_del(console_hook_id)
+print(f'PASS: {calls-console_start} ARM printf calls; packed double/64-bit args across register/stack, exact stdout bytes including NUL, strict unsupported-format and short-write errors. Console sink modeled.')

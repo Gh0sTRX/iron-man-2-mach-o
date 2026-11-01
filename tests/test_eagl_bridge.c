@@ -106,6 +106,11 @@ int main(void) {
     assert(im2_objc_object_class(layer)==layer_class);
     assert(im2_objc_object_class(send0(ordinary,"layer"))==calayer);
     assert(im2_objc_retain_count(layer)==1);
+    assert(((uint32_t(*)(void *,const char *))imp(layer,"isOpaque"))(layer,"isOpaque")==0);
+    ((void(*)(void *,const char *,uint32_t))imp(layer,"setOpaque:"))(layer,"setOpaque:",3);
+    assert(((uint32_t(*)(void *,const char *))imp(layer,"isOpaque"))(layer,"isOpaque")==1);
+    ((void(*)(void *,const char *,uint32_t))imp(layer,"setOpaque:"))(layer,"setOpaque:",0x100);
+    assert(((uint32_t(*)(void *,const char *))imp(layer,"isOpaque"))(layer,"isOpaque")==0);
 
     void *key=im2_string_create("EAGLDrawablePropertyColorFormat",0);
     void *value=im2_string_create("EAGLColorFormatRGB565",0);

@@ -156,6 +156,11 @@ int main(void) {
     assert(!im2_uikit_view_invalidation(v,&needs_layout,&needs_display));
     assert(needs_layout==1 && needs_display==1);
     assert(im2_uikit_view_invalidation(v,NULL,&needs_display));
+    assert(((uint32_t(*)(void *,const char *))method(v,"isOpaque"))(v,"isOpaque")==1);
+    ((void(*)(void *,const char *,uint32_t))method(v,"setOpaque:"))(v,"setOpaque:",0x100);
+    assert(((uint32_t(*)(void *,const char *))method(v,"isOpaque"))(v,"isOpaque")==0);
+    ((void(*)(void *,const char *,uint32_t))method(v,"setOpaque:"))(v,"setOpaque:",3);
+    assert(((uint32_t(*)(void *,const char *))method(v,"isOpaque"))(v,"isOpaque")==1);
     void *pool=im2_objc_alloc(root,NULL);assert(pool && !im2_objc_pool_push(pool));
     Im2ObjcClass *colors=im2_objc_class_named("UIColor");assert(colors);
     void *black=message_obj0(colors,"blackColor");float rgba[4];
