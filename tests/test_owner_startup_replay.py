@@ -77,6 +77,43 @@ def metadata_image():
     return data, struct.pack('<4sIIII', b'RBS1', 3, 0x2000, 0x2008, 0x2028)
 
 
+def worker_image(synchronize=False):
+    data, _ = metadata_image()
+    imports = ['_malloc','___CFConstantStringClassReference','_pthread_create']
+    if synchronize:
+        imports.append('_pthread_mutex_lock')
+    strings = b'\0'+b''.join(name.encode()+b'\0' for name in imports+['_main'])
+    offset = 28
+    for _ in range(struct.unpack_from('<I', data, 16)[0]):
+        command, length = struct.unpack_from('<II', data, offset)
+        if command == 2:
+            struct.pack_into('<4I', data, offset+8, 0x2100, len(imports)+1, 0x2200, len(strings))
+        if command == 11:
+            struct.pack_into('<II', data, offset+24, 0, len(imports))
+            struct.pack_into('<I', data, offset+68, 5 if synchronize else 4)
+        offset += length
+    for index, name in enumerate(imports+['_main']):
+        struct.pack_into('<IBBHI', data, 0x2100+12*index, strings.index(name.encode()),
+                         0xf if name == '_main' else 1, 1 if name == '_main' else 0, 0,
+                         0x1440 if name == '_main' else 0)
+    data[0x2200:0x2200+len(strings)] = strings
+    # Actual synthetic pthread_create call. Main stops here; worker has its own stack.
+    struct.pack_into('<11I', data, 0x440, 0xe92d4010,0xe59f0014,0xe3a01000,0xe59f2010,
+                     0xe3a03000,0xe59f400c,0xe12fff34,0xe8bd8010,0x2060,0x1490,0)
+    data[0x480:0x485] = b'Test\0'
+    struct.pack_into('<I', data, 0x1028, 0x1480)
+    struct.pack_into('<2I', data, 0x2198, 0x1468, 0x0c000002)
+    rebases = [0x1460,0x1464,0x2000,0x2008,0x2028]
+    if synchronize:
+        struct.pack_into('<7I', data, 0x490, 0xe92d4010,0xe59f0008,0xe59f4008,
+                         0xe12fff34,0xe8bd8010,0x2080,0)
+        struct.pack_into('<2I', data, 0x21a0, 0x14a8, 0x0c000003)
+        rebases.insert(2,0x14a4)
+    else:
+        struct.pack_into('<2I', data, 0x490, 0xe3a0002a, 0xe12fff1e)
+    return data, struct.pack('<4sI'+'I'*len(rebases), b'RBS1', len(rebases), *rebases)
+
+
 with tempfile.TemporaryDirectory() as temp:
     root = Path(temp)
     for symbol, read_token, expected, frameworks in (
@@ -130,4 +167,19 @@ with tempfile.TemporaryDirectory() as temp:
         else:
             assert report['guest_cfstrings_registered'] == 1 and not report['guest_reference_validation_errors'], report
             assert report['main_called'] and report['main_result'] == 42 and report['status'] == 'main_returned', report
+    for synchronize in (False, True):
+        data, rbs = worker_image(synchronize)
+        macho.write_bytes(data);reloc.write_bytes(rbs)
+        result = subprocess.run([sys.executable, 'tools/replay_owner_startup.py',
+            '--elf', str(args.elf), '--macho', str(macho), '--rbs1', str(reloc),
+            '--output', str(output), '--initialize-frameworks', '--register-metadata',
+            '--probe-main', '--probe-worker'], capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout+result.stderr
+        report = json.loads(output.read_text())
+        assert report['main_failure']['reason'] == 'native_thread_creation_boundary'
+        assert report['worker_called'] and report['worker_entry'] == '0x1490'
+        if synchronize:
+            assert report['worker_status'] == 'stopped' and report['worker_failure']['reason'] == 'worker_synchronization_boundary', report
+        else:
+            assert report['worker_status'] == 'returned' and report['worker_result'] == 42, report
 print('PASS: synthetic original-format ARM constructor, native relocation/call_guest, real import thunk and both unsupported code/data traps')

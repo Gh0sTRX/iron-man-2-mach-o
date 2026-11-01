@@ -231,3 +231,5 @@ for public,bridge in (('pthread_join','im2_thread_join'),('pthread_cancel','im2_
     assert darwin_entries['_'+public]==(symbols[bridge],0)
 print('PASS: thread lifecycle imports route through Darwin enum/result/error adapters')
 assert darwin_entries['_pthread_mutex_trylock']==(symbols['d_pthread_mutex_trylock'],0)
+assert entries['_CFRunLoopRunInMode']==(symbols['im2_cf_runloop_run'],0)
+assert entries['_kCFRunLoopDefaultMode']==(symbols['im2_cf_default_mode'],1)

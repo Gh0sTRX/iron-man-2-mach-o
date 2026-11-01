@@ -49,6 +49,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/time_bridge.c
   source/thread_lifecycle.c
   source/timers.c
+  source/runloop.c
   source/numbers.c
   source/defaults.c
   source/cf_memory.c

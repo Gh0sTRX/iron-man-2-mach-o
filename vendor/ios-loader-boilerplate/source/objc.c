@@ -30,6 +30,7 @@
 #include "eagl_bridge.h"
 #include "gles.h"
 #include "timers.h"
+#include "runloop.h"
 #include "numbers.h"
 #include "time_bridge.h"
 #include "defaults.h"
@@ -427,6 +428,7 @@ uint64_t im2_objc_lookup_super_words(const void *frame,const char *selector,uint
     return lookup_target_words(words[0],selector,stret,words[1]);
 }
 static uint64_t timer_now_us(void *context){(void)context;return sceKernelGetProcessTimeWide();}
+static int runloop_wait_us(void *context,uint32_t us){(void)context;return sceKernelDelayThread(us)<0?-1:0;}
 #define METHOD(sel,types,imp) {sel,types,(Im2Imp)(imp),0}
 void objc_init(void) {
     if(string_class) return;
@@ -465,6 +467,7 @@ void objc_init(void) {
         gles_eagl_ready,gles_eagl_storage,gles_eagl_present
     }))fatal_error("EAGL native graphics backend unavailable");
     if(im2_timers_init(root,(Im2TimerConfig){timer_now_us,NULL,call_guest,foundation_failure}))fatal_error("NSTimer scheduler registration failed");
+    if(im2_runloop_init((Im2RunLoopConfig){NULL,timer_now_us,runloop_wait_us,foundation_failure}))fatal_error("CFRunLoop timer backend registration failed");
     if(im2_touches_init(root,call_guest))fatal_error("Touch event registration failed");
     bind_class_imports();
 }
@@ -528,6 +531,8 @@ static void enumeration_mutation(void *object) {
 #define F(name, fn) {"_" #name, (uintptr_t)(fn), 0}
 
 const import_entry objc_imports[] = {
+    F(CFRunLoopRunInMode, im2_cf_runloop_run),
+    {"_kCFRunLoopDefaultMode",(uintptr_t)&im2_cf_default_mode,IM2_IMPORT_DATA},
     F(CFStringGetCString, cf_string_get_cstring),
     F(NSClassFromString, ns_class_from_string),F(objc_enumerationMutation, enumeration_mutation),
     F(UIApplicationMain, ui_application_main),

@@ -42,7 +42,7 @@ static void expect_failure(int which){
  }
  int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==73);
 }
-static void *worker(void *unused){(void)unused;size_t fired;uint32_t delay;assert(im2_timers_poll(&fired)==-1 && im2_timers_delay(1,&delay)==-1 && im2_timers_cancel_all()==-1);return NULL;}
+static void *worker(void *unused){(void)unused;size_t fired;uint32_t delay;assert(!im2_timers_poll(&fired) && !fired && !im2_timers_delay(1,&delay) && delay==1 && !im2_timers_cancel_all());return NULL;}
 static int poll_input(void *ctx){(void)ctx;polls++;return 0;}
 static int wait_clock(void *ctx,uint32_t us){(void)ctx;assert(us>0 && us<=10000);waits++;now+=us;return 0;}
 static int should_stop(void *ctx){(void)ctx;return polls==5;}

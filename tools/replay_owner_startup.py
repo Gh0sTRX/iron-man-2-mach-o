@@ -82,6 +82,8 @@ def main():
                         help='Register original ObjC classes and CFStrings using production validators')
     parser.add_argument('--probe-main', action='store_true',
                         help='Bounded diagnostic main probe; unresolved class references remain traps')
+    parser.add_argument('--probe-worker', action='store_true',
+                        help='After main requests a thread, probe its entry with a separate stack/TLS; stop at synchronization')
     args = parser.parse_args()
     if args.instruction_budget <= 0:
         parser.error('instruction budget must be positive')
@@ -89,6 +91,8 @@ def main():
         parser.error('--register-metadata requires --initialize-frameworks')
     if args.probe_main and not args.register_metadata:
         parser.error('--probe-main requires --register-metadata')
+    if args.probe_worker and not args.probe_main:
+        parser.error('--probe-worker requires --probe-main')
     data = args.macho.read_bytes()
     pre = preflight(data, args.rbs1.read_bytes())
     segments, indirect, initializer_slots, sym, dys = image_tables(data)
@@ -142,8 +146,9 @@ def main():
         u.mem_map(address, 0x10000)
     reg = (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3)
 
+    active_stack = [g['STACK']+0x8000]
     def native(name, values):
-        sp = g['STACK']+0x8000
+        sp = active_stack[0]
         u.reg_write(UC_ARM_REG_SP, sp)
         u.reg_write(UC_ARM_REG_LR, g['STOP'])
         u.reg_write(UC_ARM_REG_R9, 0x12345678)
@@ -350,6 +355,10 @@ def main():
                      start_routine=hex(uc.reg_read(UC_ARM_REG_R2)),
                      argument=hex(uc.reg_read(UC_ARM_REG_R3)),
                      note='Single-thread diagnostic has no OS thread scheduler; production callback bridge is not replaced by fake success.')
+            if phase == 'worker' and name in {'_pthread_join','_pthread_mutex_lock','_pthread_mutex_trylock',
+                    '_pthread_mutex_unlock','_sem_wait','_sem_post','_pthread_cancel'}:
+                fail('worker_synchronization_boundary', symbol=name,
+                     note='Main is paused; no contention, join or wake-up outcome is guessed.')
             if name.startswith('_objc_msgSend'):
                 receiver = uc.reg_read(UC_ARM_REG_R0)
                 if trap_base <= receiver < trap_base+0x10000:
@@ -451,6 +460,31 @@ def main():
                                       'phase': phase,
                                       'pc': hex(u.reg_read(UC_ARM_REG_PC)),
                                       'lr': hex(u.reg_read(UC_ARM_REG_LR))}
+    if args.probe_worker and report.get('failure', {}).get('reason') == 'native_thread_creation_boundary':
+        report['main_failure'] = report['failure']
+        entry = int(report['main_failure']['start_routine'], 16)
+        argument = int(report['main_failure']['argument'], 16)
+        report['worker_called'] = False
+        report['worker_probe_model'] = 'Main paused; separate stack and pthread-key values/identity. Shared libc reent/OS fixtures; no concurrent scheduling. Synchronization traps.'
+        if any(name == '__text' and start <= (entry & ~1) < start+size for name, segment, start, size in owner_sections):
+            phase = 'worker';failure = None
+            u.mem_map(0x45000000, 0x10000);active_stack[0] = 0x45008000
+            saved_tls = g['tls_values'];saved_identity = g['fixture_thread_identity']
+            g['tls_values'] = {}
+            g['fixture_thread_identity'] = g['OBJECT']+0xf900
+            u.mem_write(g['fixture_thread_identity'], struct.pack('<I', 2))
+            try:
+                report['worker_called'] = True
+                report['worker_entry'] = hex(entry)
+                report['worker_result'] = native('call_guest', [entry, argument, 0, 0, 0])
+                report['worker_status'] = 'returned'
+            except Exception as ex:
+                report['worker_status'] = 'stopped'
+                report['worker_failure'] = failure or {'reason': type(ex).__name__, 'detail': str(ex),
+                    'pc': hex(u.reg_read(UC_ARM_REG_PC)), 'lr': hex(u.reg_read(UC_ARM_REG_LR))}
+            finally:
+                g['tls_values'] = saved_tls;g['fixture_thread_identity'] = saved_identity
+                active_stack[0] = g['STACK']+0x8000
     report['owner_code_executed_in_emulator'] = bool(report['constructors_entered'] or report['main_called'])
     args.output.write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k: report[k] for k in ('status', 'constructors_available',

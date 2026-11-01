@@ -1041,3 +1041,49 @@ for align in (0,4):
  assert call('_pthread_mutex_lock',[0],align)==22
 mutex_record=None
 print(f'PASS: {calls-mutex_start} ARM Darwin mutex calls; atomic lazy publication, serialized init path, real trylock routing, busy-destroy recovery, failed-init retry/guards and Darwin error conversion. Native mutex scheduling modeled.')
+
+runloop_start=calls
+for name in ('im2_foundation_init','im2_timers_init','im2_runloop_init','im2_timers_cancel_all','im2_timers_poll'):
+ entries['__'+name]=(symbols[name],0)
+foundation_config=scratch+0xd00;put(foundation_config,text_at(0xe00,'/tmp'),0,0,0)
+assert call('im2_foundation_init',[root,foundation_config])==0
+pool_class=call('im2_objc_register_class',[text_at(0xe10,'NSAutoreleasePool'),root,4,0,0,0,0]);assert pool_class
+clock_entry=EXIT_CODE+512;wait_entry=EXIT_CODE+544;timer_clock={'now':0,'waits':[]}
+fixture_thread_identity=OBJECT+0xf800;put(fixture_thread_identity,1)
+def runloop_clock_hook(uc,address,size,context):
+ if address==(symbols['pthread_self']&~1):
+  uc.reg_write(UC_ARM_REG_R0,fixture_thread_identity) # Single-thread handle fixture.
+ elif address==clock_entry:
+  uc.reg_write(UC_ARM_REG_R0,timer_clock['now']&0xffffffff);uc.reg_write(UC_ARM_REG_R1,timer_clock['now']>>32)
+ elif address==wait_entry:
+  delay=uc.reg_read(UC_ARM_REG_R1);assert 0<delay<=10000
+  timer_clock['waits'].append(delay);timer_clock['now']+=delay;uc.reg_write(UC_ARM_REG_R0,0)
+ else:return
+ uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+u.hook_add(UC_HOOK_CODE,runloop_clock_hook)
+timer_status=call('im2_timers_init',[root,clock_entry,0,symbols['call_guest'],symbols['fatal_error']]);assert timer_status==0
+loop_status=call('im2_runloop_init',[0,clock_entry,wait_entry,symbols['fatal_error']]);assert loop_status==0
+for i in range(struct.unpack('<I',read(symbols['objc_imports_count'],4))[0]):
+ name,target,kind=struct.unpack('<III',read(symbols['objc_imports']+12*i,12))
+ if cstring(name) in ('_CFRunLoopRunInMode','_kCFRunLoopDefaultMode'):entries[cstring(name)]=(target,kind)
+mode_slot,kind=entries['_kCFRunLoopDefaultMode'];assert kind==1;mode=pointer(mode_slot);assert mode
+tick_entry=EXIT_CODE+768
+u.mem_write(tick_entry,struct.pack('<5I',0xe5901004,0xe2811001,0xe5801004,0xe3a0909c,0xe12fff1e))
+tick_spec=scratch+0xd60;put(tick_spec,text_at(0xe40,'tick'),text_at(0xe50,'v8@0:4'),tick_entry,0)
+tick_class=call('im2_objc_register_foreign_class',[text_at(0xe60,'RunLoopGuest'),scratch+0xf00,scratch+0xf20,root,8,tick_spec,1,0,0]);assert tick_class
+timer_class=call('im2_objc_class_named',[text_at(0xe80,'NSTimer')]);assert timer_class
+timer_selector=text_at(0xea0,'scheduledTimerWithTimeInterval:target:selector:userInfo:repeats:')
+for align in (0,4):
+ lo,hi=words(.000001)
+ assert call('_CFRunLoopRunInMode',[mode,lo,hi,1],align)==1 # Empty current-thread mode.
+ pool=call('im2_objc_alloc',[pool_class,0],align);assert call('im2_objc_pool_push',[pool],align)==0
+ target=call('im2_objc_alloc',[tick_class,0],align);assert target
+ lo,hi=words(.000010)
+ timer=call('_objc_msgSend',[timer_class,timer_selector,lo,hi,target,scratch+0xe40,0,1],align);assert timer
+ before=timer_clock['now'];lo,hi=words(.000025)
+ assert call('_CFRunLoopRunInMode',[mode,lo,hi,1],align)==3
+ assert timer_clock['now']==before+25 and pointer(target+4)==2
+ assert call('im2_timers_cancel_all',[],align)==0
+ assert call('im2_objc_pool_drain',[pool],align)==0 and call('im2_objc_retain_count',[target],align)==1
+ assert call('im2_objc_release',[target],align)==0
+print(f'PASS: {calls-runloop_start} ARM CFRunLoop/NSTimer calls; measured packed r1/r2 double ABI, borrowed default-mode global, real guest callbacks/r9 preservation, timer-only timeout semantics and cleanup. OS clocks/waits modeled.')
