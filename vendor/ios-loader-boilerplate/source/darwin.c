@@ -12,6 +12,7 @@
 #include <psp2/kernel/threadmgr.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,7 @@
 #include "darwin_printf.h"
 #include "darwin.h"
 #include "exit_registry.h"
+#include "thread_lifecycle.h"
 #include "foundation.h"
 #include "hle.h"
 #include "imports.h"
@@ -170,49 +172,62 @@ static int d_select(int n, void *r, void *w, void *e, void *t) { return 0; }
 #define DARWIN_MUTEX_SIG_INIT 0x32AAABA7
 #define ML_MUTEX_SIG 0x4D4C5458
 #define ML_MUTEXATTR_SIG 0x4D4C5441
-typedef struct { uint32_t sig; pthread_mutex_t m; } d_mutex;
+typedef struct { _Atomic uint32_t sig; pthread_mutex_t m; } d_mutex;
+static pthread_mutex_t guest_mutex_init_lock=PTHREAD_MUTEX_INITIALIZER;
+_Static_assert(offsetof(d_mutex,m)==4,"Darwin ARM32 mutex handle offset");
 typedef struct { uint32_t sig; int type; } d_mutexattr;
 
 static int d_pthread_mutexattr_init(d_mutexattr *a) {
+    if(!a)return 22;
     a->sig = ML_MUTEXATTR_SIG;
     a->type = 0;
     return 0;
 }
 static int d_pthread_mutexattr_settype(d_mutexattr *a, int type) {
+    if(!a || a->sig!=ML_MUTEXATTR_SIG || type<0 || type>2)return 22;
     a->type = type; // Darwin: 0 normal, 1 errorcheck, 2 recursive
     return 0;
 }
 static int d_pthread_mutex_init(d_mutex *m, const d_mutexattr *a) {
+    if(!m || (a && (a->sig!=ML_MUTEXATTR_SIG || a->type<0 || a->type>2)))return 22;
     pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    if (a && a->sig == ML_MUTEXATTR_SIG)
-        pthread_mutexattr_settype(&attr, a->type == 2 ? PTHREAD_MUTEX_RECURSIVE
+    int r=pthread_mutexattr_init(&attr);
+    if(r)return im2_thread_error(r);
+    if (a) {
+        r=pthread_mutexattr_settype(&attr, a->type == 2 ? PTHREAD_MUTEX_RECURSIVE
                                          : a->type == 1 ? PTHREAD_MUTEX_ERRORCHECK : PTHREAD_MUTEX_NORMAL);
-    int r = pthread_mutex_init(&m->m, &attr);
-    pthread_mutexattr_destroy(&attr);
-    m->sig = ML_MUTEX_SIG;
-    return r;
-}
-static void mutex_lazy(d_mutex *m) {
-    if (m->sig != ML_MUTEX_SIG) {
-        if (m->sig != DARWIN_MUTEX_SIG_INIT)
-            l_error("uninitialized mutex (sig 0x%08X) at %p", (unsigned)m->sig, m);
-        d_pthread_mutex_init(m, NULL);
+        if(r){pthread_mutexattr_destroy(&attr);return im2_thread_error(r);}
     }
+    r = pthread_mutex_init(&m->m, &attr);
+    pthread_mutexattr_destroy(&attr);
+    if(!r)m->sig = ML_MUTEX_SIG;
+    return im2_thread_error(r);
+}
+static int mutex_lazy(d_mutex *m) {
+    if(!m)return 22;
+    if(m->sig==ML_MUTEX_SIG)return 0;
+    int error=pthread_mutex_lock(&guest_mutex_init_lock);
+    if(error)return im2_thread_error(error);
+    int result=m->sig==ML_MUTEX_SIG?0:m->sig==DARWIN_MUTEX_SIG_INIT?d_pthread_mutex_init(m,NULL):22;
+    error=pthread_mutex_unlock(&guest_mutex_init_lock);
+    return result?result:im2_thread_error(error);
 }
 static int d_pthread_mutex_lock(d_mutex *m) {
-    mutex_lazy(m);
-    return pthread_mutex_lock(&m->m);
+    int r=mutex_lazy(m);return r?r:im2_thread_error(pthread_mutex_lock(&m->m));
+}
+static int d_pthread_mutex_trylock(d_mutex *m) {
+    int r=mutex_lazy(m);return r?r:im2_thread_error(pthread_mutex_trylock(&m->m));
 }
 static int d_pthread_mutex_unlock(d_mutex *m) {
-    mutex_lazy(m);
-    return pthread_mutex_unlock(&m->m);
+    int r=mutex_lazy(m);return r?r:im2_thread_error(pthread_mutex_unlock(&m->m));
 }
 static int d_pthread_mutex_destroy(d_mutex *m) {
-    if (m->sig != ML_MUTEX_SIG)
-        return 0;
-    m->sig = 0;
-    return pthread_mutex_destroy(&m->m);
+    if(!m)return 22;
+    if(m->sig==DARWIN_MUTEX_SIG_INIT){m->sig=0;return 0;}
+    if(m->sig!=ML_MUTEX_SIG)return 22;
+    int r=pthread_mutex_destroy(&m->m);
+    if(!r)m->sig=0;
+    return im2_thread_error(r);
 }
 
 typedef struct { void *fn, *arg; } guest_thread;
@@ -229,14 +244,14 @@ static int d_pthread_create(pthread_t *thr, const void *darwin_attr, void *fn, v
     t->arg = arg;
     pthread_attr_t attr;
     int r=pthread_attr_init(&attr);
-    if(r){free(t);return r;}
+    if(r){free(t);return im2_thread_error(r);}
     r=pthread_attr_setstacksize(&attr, 512 * 1024); // iOS default 512 KB secondary thread stack
-    if(r){pthread_attr_destroy(&attr);free(t);return r;}
+    if(r){pthread_attr_destroy(&attr);free(t);return im2_thread_error(r);}
     r = pthread_create(thr, &attr, thread_tramp, t);
     pthread_attr_destroy(&attr);
     if(r)free(t);
     l_info("pthread_create(0x%08X) -> %d", (unsigned)fn - macho_get_runtime_slide(), r);
-    return r;
+    return im2_thread_error(r);
 }
 static int d_pthread_detach(pthread_t t) {
     if (!t)
@@ -414,9 +429,12 @@ const import_entry darwin_imports[] = {
     F(fcntl, d_net_fail), F(inet_addr, d_net_fail), F(gethostbyname, d_gethostbyname),
     F(select, d_select),
     // pthreads / semaphores
+    F(pthread_join, im2_thread_join), F(pthread_cancel, im2_thread_cancel),
+    F(pthread_setcanceltype, im2_thread_setcanceltype), F(pthread_testcancel, im2_thread_testcancel),
     F(pthread_create, d_pthread_create), F(pthread_detach, d_pthread_detach), F(pthread_self, d_pthread_self),
     F(pthread_setschedparam, d_pthread_setschedparam), F(pthread_mutex_init, d_pthread_mutex_init),
     F(pthread_mutex_lock, d_pthread_mutex_lock), F(pthread_mutex_unlock, d_pthread_mutex_unlock),
+    F(pthread_mutex_trylock, d_pthread_mutex_trylock),
     F(pthread_mutex_destroy, d_pthread_mutex_destroy), F(pthread_mutexattr_init, d_pthread_mutexattr_init),
     F(pthread_mutexattr_settype, d_pthread_mutexattr_settype), F(sem_open, d_sem_open),
     F(sem_close, d_sem_close), F(sem_unlink, d_sem_unlink), F(sem_wait, d_sem_wait),

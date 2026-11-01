@@ -47,6 +47,7 @@ add_library(im2_ios_loader_objects OBJECT
   source/uikit_bootstrap.c
   source/uikit_loop.c
   source/time_bridge.c
+  source/thread_lifecycle.c
   source/timers.c
   source/numbers.c
   source/defaults.c

@@ -229,3 +229,10 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-fram
   -pthread -I vendor/ios-loader-boilerplate/source tests/test_exit_registry.c \
   vendor/ios-loader-boilerplate/source/exit_registry.c -o build/host-runtime/test_exit_registry
 build/host-runtime/test_exit_registry
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -pthread -I vendor/ios-loader-boilerplate/source tests/test_thread_lifecycle.c \
+  vendor/ios-loader-boilerplate/source/thread_lifecycle.c \
+  -Wl,--wrap=pthread_join,--wrap=pthread_cancel,--wrap=pthread_setcanceltype \
+  -o build/host-runtime/test_thread_lifecycle
+build/host-runtime/test_thread_lifecycle

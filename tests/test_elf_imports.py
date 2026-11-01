@@ -220,3 +220,14 @@ for i in range(exit_count):
 assert set(exit_entries)=={'_atexit','___cxa_atexit'}
 assert 'd___cxa_atexit' not in symbols,'Old no-op exit registration must not remain'
 print('PASS: real guest atexit/C++ lifetime registry replaces the old no-op binding')
+
+darwin_count=struct.unpack('<I',read(symbols['darwin_imports_count'],4))[0]
+darwin_entries={}
+for i in range(darwin_count):
+    name,target,kind=struct.unpack('<III',read(symbols['darwin_imports']+12*i,12))
+    darwin_entries[cstring(name)]=(target,kind)
+for public,bridge in (('pthread_join','im2_thread_join'),('pthread_cancel','im2_thread_cancel'),
+                      ('pthread_setcanceltype','im2_thread_setcanceltype'),('pthread_testcancel','im2_thread_testcancel')):
+    assert darwin_entries['_'+public]==(symbols[bridge],0)
+print('PASS: thread lifecycle imports route through Darwin enum/result/error adapters')
+assert darwin_entries['_pthread_mutex_trylock']==(symbols['d_pthread_mutex_trylock'],0)

@@ -23,6 +23,7 @@ next_alloc=HEAP;live={};calls=0
 hook_symbol_addresses={value&~1 for value in symbols.values()}
 
 gles_capture={};gles_seen=[];once_seen=set();tls_values={};tls_next=1
+mutex_errors={};mutex_record=None
 ONCE_RETURN=STOP+0x200
 u.mem_write(ONCE_RETURN,struct.pack("<3I",0xe49de008,0xe3a00000,0xe12fff1e))
 
@@ -84,10 +85,11 @@ def hook(uc,addr,size,_):
    sp=uc.reg_read(UC_ARM_REG_SP)-8
    uc.mem_write(sp,struct.pack('<II',uc.reg_read(UC_ARM_REG_LR),0))
    uc.reg_write(UC_ARM_REG_SP,sp);uc.reg_write(UC_ARM_REG_LR,ONCE_RETURN);uc.reg_write(UC_ARM_REG_PC,callback)
- elif matches('pthread_mutex_lock','pthread_mutex_unlock','pthread_mutex_init','pthread_mutex_destroy',
+ elif matches('pthread_mutex_lock','pthread_mutex_trylock','pthread_mutex_unlock','pthread_mutex_init','pthread_mutex_destroy',
               'pthread_mutexattr_init','pthread_mutexattr_settype','pthread_mutexattr_destroy'):
-
-  returned(0) # Single-thread fixture: no OS mutex/scheduling coverage.
+  name=next(n for n in ('pthread_mutex_lock','pthread_mutex_trylock','pthread_mutex_unlock','pthread_mutex_init','pthread_mutex_destroy','pthread_mutexattr_init','pthread_mutexattr_settype','pthread_mutexattr_destroy') if matches(n))
+  if mutex_record is not None:mutex_record.append((name,arg(0)))
+  returned(mutex_errors.get(name,0)) # Single-thread fixture: no OS scheduling coverage.
  elif addr in {symbols[n]&~1 for n in ('memcpy','memmove','memset')} :
   dst=uc.reg_read(UC_ARM_REG_R0);src=uc.reg_read(UC_ARM_REG_R1);n=uc.reg_read(UC_ARM_REG_R2)
   assert n<0x10000
@@ -940,7 +942,7 @@ for align in (0,4):
  finally:allocate=saved_allocate
  for operation,error in (('pthread_attr_init',22),('pthread_attr_setstacksize',22),('pthread_create',11)):
   thread_outcomes[operation]=error;thread_seen.clear();before=dict(live)
-  assert call('_pthread_create',[scratch+0xa00,0,thread_guest,0],align)==error and live==before
+  assert call('_pthread_create',[scratch+0xa00,0,thread_guest,0],align)==(35 if error==11 else error) and live==before
   if operation=='pthread_attr_init':assert thread_seen==['pthread_attr_init']
   else:assert thread_seen[-1]=='pthread_attr_destroy'
   thread_outcomes[operation]=0
@@ -950,3 +952,92 @@ for align in (0,4):
  entries['__test_thread_entry']=(thread_context[0],0)
  assert call('test_thread_entry',[thread_context[1]],align)==0xfeed and live==before
 print(f'PASS: {calls-thread_start} ARM pthread bridge calls; OOM/invalid args, attr/create failure cleanup, real trampoline/free/call_guest and guest r9 preservation. OS thread creation/scheduling modeled.')
+
+lifecycle_start=calls
+lifecycle_names={'_pthread_join','_pthread_cancel','_pthread_setcanceltype','_pthread_testcancel'}
+for i in range(struct.unpack('<I',read(symbols['darwin_imports_count'],4))[0]):
+ name,target,kind=struct.unpack('<III',read(symbols['darwin_imports']+12*i,12))
+ if cstring(name) in lifecycle_names:entries[cstring(name)]=(target,kind)
+lifecycle_native={symbols[name]&~1:name for name in ('pthread_join','pthread_cancel','pthread_setcanceltype','pthread_testcancel')}
+lifecycle_state={'type':1,'error':0,'result':0,'calls':0} # Actual Vita PTE deferred=1.
+def lifecycle_hook(uc,address,size,context):
+ name=lifecycle_native.get(address)
+ if not name:return
+ lifecycle_state['calls']+=1
+ result=lifecycle_state['error']
+ if not result and name=='pthread_setcanceltype':
+  value=uc.reg_read(UC_ARM_REG_R0);assert value in (0,1)
+  out=uc.reg_read(UC_ARM_REG_R1)
+  if out:uc.mem_write(out,struct.pack('<I',lifecycle_state['type']))
+  lifecycle_state['type']=value
+ if not result and name=='pthread_join':
+  assert uc.reg_read(UC_ARM_REG_R0)==0x1234
+  out=uc.reg_read(UC_ARM_REG_R1)
+  if out:uc.mem_write(out,struct.pack('<I',lifecycle_state['result']))
+ uc.reg_write(UC_ARM_REG_R0,result);uc.reg_write(UC_ARM_REG_PC,uc.reg_read(UC_ARM_REG_LR))
+u.hook_add(UC_HOOK_CODE,lifecycle_hook)
+for align in (0,4):
+ out=scratch+0xb00;put(out,0xabcdef01,GUARD)
+ assert call('_pthread_setcanceltype',[0,out],align)==0 and get(out,2)==(2,GUARD) and lifecycle_state['type']==0
+ assert call('_pthread_setcanceltype',[2,out],align)==0 and get(out,2)==(0,GUARD) and lifecycle_state['type']==1
+ count=lifecycle_state['calls'];put(out,0xabcdef01,GUARD)
+ assert call('_pthread_setcanceltype',[1,out],align)==22 and lifecycle_state['calls']==count and get(out,2)==(0xabcdef01,GUARD)
+ for native_error,darwin_error in ((45,11),(11,35),(134,45),(22,22),(3,3)):
+  lifecycle_state['error']=native_error
+  assert call('_pthread_join',[0x1234,out],align)==darwin_error and get(out,2)==(0xabcdef01,GUARD)
+ lifecycle_state['error']=22
+ assert call('_pthread_setcanceltype',[0,out],align)==22 and get(out,2)==(0xabcdef01,GUARD)
+ lifecycle_state['error']=0
+ for value,expected in ((0xdeadbeef,0xdeadbeef),(0xffffffff,1),(0,0)):
+  lifecycle_state['result']=value
+  assert call('_pthread_join',[0x1234,out],align)==0 and get(out,2)==(expected,GUARD)
+ assert call('_pthread_join',[0x1234,0],align)==0
+ lifecycle_state['error']=3;assert call('_pthread_cancel',[0x1234],align)==3
+ lifecycle_state['error']=0;assert call('_pthread_cancel',[0x1234],align)==0
+ count=lifecycle_state['calls'];call('_pthread_testcancel',[],align);assert lifecycle_state['calls']==count+1
+print(f'PASS: {calls-lifecycle_start} ARM thread lifecycle calls; actual PTE enum/error/canceled-sentinel translation, nullable outputs, 4-byte writes and failure preservation. OS join/cancellation modeled; real host cancellation tested separately.')
+
+mutex_start=calls
+mutex_import_names={'_pthread_mutex_'+suffix for suffix in ('init','lock','trylock','unlock','destroy')}
+mutex_import_names|={'_pthread_mutexattr_init','_pthread_mutexattr_settype'}
+for i in range(struct.unpack('<I',read(symbols['darwin_imports_count'],4))[0]):
+ name,target,kind=struct.unpack('<III',read(symbols['darwin_imports']+12*i,12))
+ if cstring(name) in mutex_import_names:entries[cstring(name)]=(target,kind)
+mutex_record=[]
+for align in (0,4):
+ mutex=scratch+0xc00;attr=mutex+64
+ mutex_record.clear()
+ put(mutex,0x32aaaba7,0x87654321,GUARD)
+ assert call('_pthread_mutex_trylock',[mutex],align)==0 and pointer(mutex)==0x4d4c5458 and pointer(mutex+8)==GUARD
+ assert [name for name,p in mutex_record]==['pthread_mutex_lock','pthread_mutexattr_init','pthread_mutex_init','pthread_mutexattr_destroy','pthread_mutex_unlock','pthread_mutex_trylock']
+ assert mutex_record[0][1]==symbols['guest_mutex_init_lock'] and mutex_record[-1][1]==mutex+4
+ first_inits=sum(name=='pthread_mutex_init' for name,p in mutex_record)
+ mutex_errors['pthread_mutex_trylock']=16
+ assert call('_pthread_mutex_trylock',[mutex],align)==16 and pointer(mutex)==0x4d4c5458
+ assert sum(name=='pthread_mutex_init' for name,p in mutex_record)==first_inits
+ mutex_errors.clear();mutex_errors['pthread_mutex_lock']=45
+ assert call('_pthread_mutex_lock',[mutex],align)==11
+ mutex_errors.clear();mutex_errors['pthread_mutex_destroy']=16
+ assert call('_pthread_mutex_destroy',[mutex],align)==16 and pointer(mutex)==0x4d4c5458
+ mutex_errors.clear();assert call('_pthread_mutex_unlock',[mutex],align)==0
+ assert call('_pthread_mutex_destroy',[mutex],align)==0 and pointer(mutex)==0
+ # Failed lazy initialization must not publish a valid signature or lock it.
+ put(mutex,0x32aaaba7,0x87654321,GUARD);mutex_record.clear();mutex_errors['pthread_mutex_init']=11
+ assert call('_pthread_mutex_lock',[mutex],align)==35 and pointer(mutex)==0x32aaaba7
+ assert not any(name=='pthread_mutex_lock' and p==mutex+4 for name,p in mutex_record)
+ mutex_errors.clear();assert call('_pthread_mutex_lock',[mutex],align)==0
+ assert call('_pthread_mutex_destroy',[mutex],align)==0
+ put(mutex,0xabcdef01,0,GUARD);mutex_record.clear()
+ assert call('_pthread_mutex_trylock',[mutex],align)==22 and pointer(mutex)==0xabcdef01
+ assert not any(name=='pthread_mutex_init' for name,p in mutex_record)
+ assert call('_pthread_mutexattr_init',[attr],align)==0
+ assert call('_pthread_mutexattr_settype',[attr,2],align)==0
+ assert call('_pthread_mutexattr_settype',[attr,9],align)==22 and pointer(attr+4)==2
+ mutex_errors['pthread_mutexattr_settype']=22
+ assert call('_pthread_mutex_init',[mutex,attr],align)==22 and pointer(mutex)==0xabcdef01
+ mutex_errors.clear()
+ assert call('_pthread_mutex_init',[0,0],align)==22
+ assert call('_pthread_mutexattr_init',[0],align)==22
+ assert call('_pthread_mutex_lock',[0],align)==22
+mutex_record=None
+print(f'PASS: {calls-mutex_start} ARM Darwin mutex calls; atomic lazy publication, serialized init path, real trylock routing, busy-destroy recovery, failed-init retry/guards and Darwin error conversion. Native mutex scheduling modeled.')

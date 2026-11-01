@@ -270,7 +270,7 @@ def main():
 
     report = {
         'schema': 1, 'macho_sha256': hashlib.sha256(data).hexdigest(),
-        'elf_sha256': hashlib.sha256(args.elf.read_bytes()).hexdigest(),
+        'elf_sha256': hashlib.sha256(g['binary']).hexdigest(),
         'preflight': pre, 'slide': 0, 'diagnostic_only': True,
         'production_loader_execution': False, 'main_called': False,
         'physical_vita_verified': False, 'gpu_verified': False,
