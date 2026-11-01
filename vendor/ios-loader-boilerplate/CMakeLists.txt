@@ -20,13 +20,20 @@ foreach(_header "kubridge.h" "vitaGL.h")
   endif()
 endforeach()
 
-option(IM2_VITAGL_ENV_PROBE "Use the asset-free native VitaGL diagnostic entry (ELF only)" OFF)
+option(IM2_VITAGL_ENV_PROBE "Use the isolated asset-free native VitaGL diagnostic entry" OFF)
 set(_entry_source source/main.c)
 set(_elf_target im2_ios_loader)
 if(IM2_VITAGL_ENV_PROBE)
   set(_entry_source "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/vitagl_environment_probe/main.c")
   set(_elf_target im2_vitagl_environment_probe)
 endif()
+if(IM2_VITAGL_ENV_PROBE)
+  add_library(im2_ios_loader_objects OBJECT
+    ${_entry_source}
+    ../../tests/vitagl_environment_probe/imports.c
+    source/gles.c source/gles_oes.c source/gles_arrays.c
+    source/log.c source/vitagl_no_splash.c)
+else()
 add_library(im2_ios_loader_objects OBJECT
   ${_entry_source}
   source/darwin_printf.c
@@ -82,11 +89,15 @@ add_library(im2_ios_loader_objects OBJECT
   source/vitagl_no_splash.c
   source/asm.S
 )
+endif()
 target_include_directories(im2_ios_loader_objects PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/source"
   "${_sdk}/include/freetype2"
 )
 target_compile_options(im2_ios_loader_objects PRIVATE -O2 -g -ffixed-r9)
+if(IM2_VITAGL_ENV_PROBE)
+  target_compile_options(im2_ios_loader_objects PRIVATE -ffunction-sections -fdata-sections)
+endif()
 message(STATUS "Loader object compilation only. Link, RX validation and VPK are separate gates.")
 
 # Link the actual complete loader without creating SELF or VPK.
@@ -94,6 +105,10 @@ option(IM2_LINK_LOADER "Link full research loader ELF" OFF)
 if(IM2_LINK_LOADER)
   add_executable(${_elf_target} $<TARGET_OBJECTS:im2_ios_loader_objects>)
   target_link_options(${_elf_target} PRIVATE -Wl,-q -Wl,-Map=${CMAKE_BINARY_DIR}/${_elf_target}.map)
+  if(IM2_VITAGL_ENV_PROBE)
+    # Drop unreachable game presentation/IME code rather than substituting stubs.
+    target_link_options(${_elf_target} PRIVATE -Wl,--gc-sections)
+  endif()
   target_link_libraries(${_elf_target} PRIVATE
     -Wl,--whole-archive pthread -Wl,--no-whole-archive
     vitaGL vitashark SceShaccCgExt stdc++ mathneon freetype png16 z bz2 m

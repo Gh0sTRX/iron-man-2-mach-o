@@ -2,8 +2,6 @@
 .syntax unified
 .arm
 .text
-.global ml_unimpl_log
-ml_unimpl_log: bx lr
 .global im2_objc_lookup_words
 .global im2_objc_lookup_super_words
 im2_objc_lookup_words:

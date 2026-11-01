@@ -17,24 +17,26 @@
 #include "imports.h"
 #include "hle.h"
 
-const char im2_vitagl_environment_probe_marker[]="native-vitagl-environment-v1-no-guest";
+const char im2_vitagl_environment_probe_marker[]="native-vitagl-environment-v2-no-guest";
 #define RESULT_PATH DATA_PATH "vitagl_environment_probe.json"
 int _newlib_heap_size_user=256*1024*1024;
 unsigned int sceUserMainThreadStackSize=1024*1024;
 static struct {
  const char *stage,*failure;
  int model,shader_file,ready_before,ready_after,strings,limits,fbo_complete;
- int clear_match,triangle_match,cleanup,complete;
+ int clear_match,triangle_match,depth_match,formats_match,cleanup,complete;
+ int color_width,color_height,color_format,depth_width,depth_height,depth_format;
  unsigned error,status,error_queries;int max_texture,framebuffer_binding;
  uint64_t started_us;
  char vendor[192],renderer[192],version[192];
- unsigned char clear_pixel[4],triangle_pixel[4];
+ unsigned char clear_pixel[4],triangle_pixel[4],depth_pixel[4];
 } result;
 static struct {
  void (*gen_fb)(GLsizei,GLuint *),(*gen_rb)(GLsizei,GLuint *);
  void (*bind_fb)(GLenum,GLuint),(*bind_rb)(GLenum,GLuint);
  void (*attach)(GLenum,GLenum,GLenum,GLuint);
  GLenum (*status)(GLenum),(*error)(void);
+ void (*parameter)(GLenum,GLenum,GLint *);
  void (*delete_fb)(GLsizei,const GLuint *),(*delete_rb)(GLsizei,const GLuint *);
 } ops;
 static GLuint fb,color,depth;
@@ -58,6 +60,8 @@ static int checkpoint(const char *stage){
  fprintf(file,"\n\"vendor\":");quoted(file,result.vendor);fprintf(file,",\"renderer\":");quoted(file,result.renderer);fprintf(file,",\"version\":");quoted(file,result.version);
  fprintf(file,",\n\"fbo_complete\":%d,\"fbo_status\":%u,\"native_framebuffer_binding\":%d,\"first_gl_error\":%u,\"gl_error_queries\":%u,",result.fbo_complete,result.status,result.framebuffer_binding,result.error,result.error_queries);
  fprintf(file,"\n\"clear_pixel\":[%u,%u,%u,%u],\"triangle_pixel\":[%u,%u,%u,%u],",result.clear_pixel[0],result.clear_pixel[1],result.clear_pixel[2],result.clear_pixel[3],result.triangle_pixel[0],result.triangle_pixel[1],result.triangle_pixel[2],result.triangle_pixel[3]);
+ fprintf(file,"\n\"oes_color_storage\":[%d,%d,%d],\"oes_depth_storage\":[%d,%d,%d],\"oes_storage_metadata_match\":%d,\"native_format_precision_verified\":false,",result.color_width,result.color_height,result.color_format,result.depth_width,result.depth_height,result.depth_format,result.formats_match);
+ fprintf(file,"\n\"depth_pixel\":[%u,%u,%u,%u],\"depth_occlusion_match\":%d,",result.depth_pixel[0],result.depth_pixel[1],result.depth_pixel[2],result.depth_pixel[3],result.depth_match);
  fprintf(file,"\n\"clear_match\":%d,\"triangle_match\":%d,\"cleanup_passed\":%d,\"gpu_checks_passed\":%d\n}\n",result.clear_match,result.triangle_match,result.cleanup,result.complete);
  int ok=!ferror(file);if(fclose(file))ok=0;return ok?0:-1;
 }
@@ -74,6 +78,7 @@ static int bind_ops(void){
  B(attach,"_glFramebufferRenderbufferOES",void(*)(GLenum,GLenum,GLenum,GLuint));
  B(status,"_glCheckFramebufferStatusOES",GLenum(*)(GLenum));
  B(error,"_glGetError",GLenum(*)(void));
+ B(parameter,"_glGetRenderbufferParameterivOES",void(*)(GLenum,GLenum,GLint *));
  B(delete_fb,"_glDeleteFramebuffersOES",void(*)(GLsizei,const GLuint *));
  B(delete_rb,"_glDeleteRenderbuffersOES",void(*)(GLsizei,const GLuint *));
 #undef B
@@ -122,6 +127,10 @@ int main(void){
  ops.bind_fb(IM2_OES_FB,fb);ops.bind_rb(IM2_OES_RB,color);
  int storage_ok=gles_eagl_storage(IM2_OES_RB,IM2_OES_RGB565);error_free=no_error();
  if(!storage_ok || !error_free){result.failure="production_color_storage_failed";goto failed;}
+ ops.parameter(IM2_OES_RB,0x8D42,&result.color_width);
+ ops.parameter(IM2_OES_RB,0x8D43,&result.color_height);
+ ops.parameter(IM2_OES_RB,0x8D44,&result.color_format);
+ if(!no_error()){result.failure="color_storage_query_failed";goto failed;}
  ops.attach(IM2_OES_FB,IM2_OES_COLOR,IM2_OES_RB,color);
  if(!no_error()){result.failure="production_color_attach_failed";goto failed;}
  ops.bind_rb(IM2_OES_RB,depth);
@@ -129,6 +138,12 @@ int main(void){
  uintptr_t storage=binding("_glRenderbufferStorageOES");
  if(!storage){result.failure="depth_storage_binding_missing";goto failed;}
  ((void(*)(GLenum,GLenum,GLsizei,GLsizei))storage)(IM2_OES_RB,IM2_OES_DEPTH16,320,480);
+ ops.parameter(IM2_OES_RB,0x8D42,&result.depth_width);
+ ops.parameter(IM2_OES_RB,0x8D43,&result.depth_height);
+ ops.parameter(IM2_OES_RB,0x8D44,&result.depth_format);
+ result.formats_match=result.color_width==320 && result.color_height==480 && result.color_format==IM2_OES_RGB565 && result.depth_width==320 && result.depth_height==480 && result.depth_format==IM2_OES_DEPTH16;
+ error_free=no_error();
+ if(!result.formats_match || !error_free){result.failure="oes_storage_metadata_mismatch";goto failed;}
  ops.attach(IM2_OES_FB,IM2_OES_DEPTH,IM2_OES_RB,depth);
  result.status=ops.status(IM2_OES_FB);result.fbo_complete=result.status==IM2_OES_COMPLETE;
  error_free=no_error();
@@ -153,6 +168,17 @@ int main(void){
  result.triangle_match=result.triangle_pixel[0]>=240 && result.triangle_pixel[1]<=8 && result.triangle_pixel[2]<=8 && result.triangle_pixel[3]>=240;
  error_free=no_error();
  if(!result.triangle_match || !error_free){result.failure="triangle_readback_failed";goto failed;}
+ if(checkpoint("before_depth_occlusion_readback"))goto report_failed;
+ glEnable(GL_DEPTH_TEST);glDepthMask(GL_TRUE);glDepthFunc(GL_LESS);
+ glClearDepth(1.0);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+ const GLfloat near_vertices[]={-1.f,-1.f,0.f,1.f,-1.f,0.f,0.f,1.f,0.f};
+ const GLfloat far_vertices[]={-1.f,-1.f,0.75f,1.f,-1.f,0.75f,0.f,1.f,0.75f};
+ glVertexPointer(3,GL_FLOAT,0,near_vertices);glColor4f(1.f,0.f,0.f,1.f);glDrawArrays(GL_TRIANGLES,0,3);
+ glVertexPointer(3,GL_FLOAT,0,far_vertices);glColor4f(0.f,0.f,1.f,1.f);glDrawArrays(GL_TRIANGLES,0,3);glFinish();
+ memset(result.depth_pixel,0x5a,4);glReadPixels(8,6,1,1,GL_RGBA,GL_UNSIGNED_BYTE,result.depth_pixel);
+ result.depth_match=result.depth_pixel[0]>=240 && result.depth_pixel[1]<=8 && result.depth_pixel[2]<=8 && result.depth_pixel[3]>=240;
+ error_free=no_error();
+ if(!result.depth_match || !error_free){result.failure="depth_occlusion_readback_failed";goto failed;}
  release_objects();result.cleanup=no_error();
  if(!result.cleanup){result.failure="cleanup_gl_error";goto failed;}
  result.complete=1;

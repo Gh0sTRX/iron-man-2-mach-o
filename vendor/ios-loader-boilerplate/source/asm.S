@@ -2,22 +2,6 @@
     .arm
     .text
 
-@ Unimplemented import handler: thunk leaves its index in r12. Logs name and returns 0
-@ (r0 = r1 = 0, which acts as "nil" for ObjC and 0 for 64-bit integer returns).
-    .global ml_unimpl_entry
-    .type ml_unimpl_entry, %function
-ml_unimpl_entry:
-    push    {r4, lr}
-    mov     r4, sp
-    bic     sp, sp, #7          @ ml_unimpl_log is native PS Vita code (AAPCS 8-byte aligned)
-    mov     r0, r12
-    blx     ml_unimpl_log
-    mov     sp, r4
-    pop     {r4, lr}
-    mov     r0, #0
-    mov     r1, #0
-    bx      lr
-
 @ uint32_t call_guest(void *fn, a0, a1, a2, a3): invokes guest function while preserving r9,
 @ which iOS treats as a scratch register.
     .global call_guest
