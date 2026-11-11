@@ -10,6 +10,7 @@
 #define PORT_DEVICE_MACHINE "iPhone2,1" // hw.machine (3GS: calidad alta en Gameloft)
 #define GLES_POOL_MB 24
 #define PORT_ACCEL_FROM_STICK 0        // juego de acción: el stick no inclina
+#define PORT_GL_DIAG 0                 // sin trazas/capturas TGA en ux0: trababan el juego
 #define PORT_SCREEN_W 320
 #define PORT_SCREEN_H 480
 #define PORT_SCREEN_SCALE 1.0f

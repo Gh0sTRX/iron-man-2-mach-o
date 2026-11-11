@@ -1,77 +1,84 @@
-# Iron Man 2 — Progreso del Port (iOS Mach-O)
+# Iron Man 2 (iOS 1.0.3) → PS Vita — progreso
 
+Base: runtime iOS común (copia maestra en `Ferrari-GT-Evolution-vita`, `tools/sync_runtime.sh`) + lo propio de
+Iron Man 2 (`source/port_config.h`, `source/patch.c`). IPA: `Iron Man 2_v.1.0.3.ipa` (thin armv6, `cryptid 0`,
+MinimumOSVersion 3.0). Motor: **Irrlicht 1.4.2** (GLES1) + **gameswf** (menús Flash `ironmanmenu.bin`, texturas
+PVR `.t`), audio por OpenAL con música IMA ADPCM (`.www` = WAV) decodificada por el juego.
 
-### Phase 1: Repo and tools
-- [x] IPA extracted, `game_app` symlink, ios-loader-boilerplate merged, CMake/`hle.h` adapted to `ironman2`.
-- [x] Executable decrypted (cryptid 0).
-- [x] `rebase.bin` + `docs/macho_report.txt` generated (`python3 -I tools/macho_prep.py game_app/IronMan2 ux0_data/ironman2/rebase.bin --report docs/macho_report.txt`).
+## Estado (2026-11-11)
 
-### Phase 2: Decompilation and inventory
-- [x] `decompiled/macho/` dumps (frameworks, ObjC classes, symbols, imports) -- section 2.
-- [ ] Ghidra pseudo-C of `IronMan2` (optional but needed for crash triage).
-- [ ] Classify `imports.txt` into: libc/math/pthread (map to newlib/darwin.c), GL (map to vitaGL), ObjC/CF (objc.c), audio, network/GameKit/StoreKit (stub returning "unavailable").
-- [ ] Write the classification as a table in `docs/imports.md` (symbol → shim file → status).
+Hosttest ARM32 (`hosttest/run.sh`, Docker armel): **llega a la pantalla de título** (logos Marvel/Gameloft →
+"Touch the screen to continue"), rotación y aspecto correctos (816x544 con barras). **Falta la corrida #1 en
+la consola.**
 
-### Phase 3: Real engine analysis
-- [ ] Identify the engine by symbols (`grep -i` on `symbols.txt`: `cocos2d`, `Unity`, `SIO2`, `oolong`, `Box2D`, custom `CS_`/`GS_` prefixes), never assume "same engine as another port".
-- [ ] Map the lifecycle from section 1's candidates: app delegate class, GL view class (`EAGLView`/`ES1Renderer`), how the frame loop is driven (`NSTimer`, `CADisplayLink`, `performSelector:afterDelay:`, or a game thread).
-- [ ] Find where resources are opened (`fopen`, `NSBundle pathForResource:ofType:`, `UIImage imageNamed:`) -- these define what `BUNDLE_PATH` must serve.
-- [ ] Detect middleware (OpenAL, FMOD, libpng, zlib, Flurry/analytics) and decide stub vs. implementation. Analytics/ads/StoreKit = stub.
+- [x] Repo `psvita-toolkit init --ipa` (IRONMAN02, slug `ironman2`), runtime de Ferrari sincronizado,
+      `cxx_imports.c` generado (46 símbolos C++, 0 sin equivalente).
+- [x] Imports: 0 sin implementar. Agregados al runtime (también en el maestro Ferrari, sin commit allá):
+      `setlocale`, `localeconv`, `strcoll`, `tmpnam`, `system`, `CFAllocatorGetDefault`,
+      `MPMediaLibraryDidChangeNotification`.
+- [x] VFP short vectors (FPSCR.LEN=3): 162 bloques de `CMatrix4` de Irrlicht (47 funciones) → NEON con 9
+      traducciones nuevas en `macho.c` (`vmul/vmla s24|s28` y `vadd s24,s24,s20`).
+- [x] Rebase (`tools/ios_prep.py`): desplazamientos PIC (`ldr rX,[pc,#]` ... `add rY, pc, rX`) se rebaseaban
+      como punteros → punteros dobles `0x30xxxxxx` en los inicializadores estáticos (0x6220, 0xEEC4). Ventana
+      de uso 12→48 instrucciones, corte en `pop {pc}`, y r4–r8/r10/r11 se siguen a través de `bl`.
+      71 palabras menos (33,468), todas verificadas como PC-relativas.
+- [x] 297 inicializadores, `main()` → `UIApplicationMain(AppController)` → NSTimer 60 Hz `mainTimer_onUpdate`;
+      hilo de juego (0x52AF8) + hilo de audio Vox (0x2EDA34).
+- [x] Fallos de `fopen` siempre al log (`fopen(...) falló`).
+- [x] LiveArea con arte del juego (icono del IPA, título).
 
-### Phase 4: Loader and ObjC bootstrap (GATE: log reaches the app delegate)
-- [ ] `macho_load()` maps `__TEXT`/`__DATA` at `0x98000000`, applies `rebase.bin`, binds `__nl_symbol_ptr`/`__la_symbol_ptr`.
-- [ ] Every import in `imports.txt` resolves to a shim or `ml_unimpl_entry`; `[UNIMPL]` lines in the log are the to-do list.
-- [ ] `macho_run_inits()` runs `__mod_init_func` (C++ static constructors) without crashing.
-- [ ] ObjC: register the game's classes from `__objc_classlist`, implement `alloc/init/retain/release/autorelease`, `NSString`, `NSArray`, `NSDictionary`, `NSUserDefaults` (backed by `saves/`), `NSBundle mainBundle resourcePath`.
-- [ ] Call the delegate's `applicationDidFinishLaunching:` (or `application:didFinishLaunchingWithOptions:`) via `call_guest`. Log `[BOOT] delegate ok`.
+## Hosttest: arreglos que NO aplican a la Vita
 
-### Phase 5: Graphics (GATE: first frame on screen)
-- [ ] vitaGL init (`vglInitExtended`) at 960x544, SoftFP build; `EAGLContext`/`CAEAGLLayer`/`renderbufferStorage:fromDrawable:` shims backed by the virtual FBO (`source/gles.c`).
-- [ ] Orientation: rotate/scale the virtual FBO for portrait games (320x480 / 640x960 / 768x1024) to 960x544 with correct aspect.
-- [ ] `presentRenderbuffer:` → `vglSwapBuffers`; drive the game's draw selector from the main loop at its native rate.
-- [ ] Textures: CgBI PNG via `source/cgbi.c` (`tools/cgbi_check.py` to verify), PVRTC via vitaGL; `GL_FIXED` vertex arrays converted.
-- [ ] GLES2 games: GLSL shaders → `psvita-toolkit shader-transpile` / `shader-live-reload`.
+- `darwin.c` compilado con `time_t` de 32 bits (glibc con `_TIME_BITS=64` escribía 16 bytes en el `timeval`
+  de 8 de iOS: `System::CurrentTimeMillis` → pc=0). En VitaSDK `timeval` ya es de 8 bytes.
+- Contexto GL solo para el primer hilo del juego (el hilo de audio se lo robaba y `glGenTextures` devolvía 0
+  → textura nula en `gameswf::bitmap_info_ogl::set_texture`). vitaGL no tiene contexto por hilo.
+- PVRTC (`ironmanmenutga3/4.t`) da error en Mesa; en la Vita lo soporta GXM.
+- `HOSTTEST_TAP_S`: a ~2 fps un toque de 0,5 s empieza y termina en el mismo frame.
 
-### Phase 6: Touch
-- [ ] Front touch → `UITouch` objects with `locationInView:` in the game's logical coordinates (undo the FBO rotation/scale).
-- [ ] Deliver `touchesBegan/Moved/Ended:withEvent:` to the view that the game registered; multitouch if `multipleTouchEnabled`.
-- [ ] Rear panel disabled or mapped (see Phase 7).
+## Datos (no se commitean)
 
-### Phase 7: Physical controls
-- [ ] Default mapping: D-pad/stick/✕○□△/L/R/START/SELECT → synthesized touches on the on-screen buttons (`source/input.c` touch layer) or direct calls into the game's input functions when found in `symbols.txt`.
-- [ ] Analog deadzone (~8-12) and sensitivity with sane defaults.
-- [ ] Remappable `controls.txt` in `ux0:data/ironman2/` (`VITA_BUTTON = GAME_ACTION`); missing file = defaults.
+`tools/stage_data.sh` arma `ux0_data/ironman2/` (~964 MB: bundle, rebase/binds, nib.txt, nibs/, controls.txt)
+y `python3 -I tools/deploy_data.py` lo sube a `ux0:data/ironman2/`.
 
-### Phase 8: Audio
-- [ ] AudioUnit RemoteIO / AudioQueue / OpenAL / `AVAudioPlayer` (whichever `frameworks.txt` shows) → `sceAudioOut` thread (`source/coreaudio.c`).
-- [ ] Music (often `.caf`/`.m4a`/`.mp3`) decodes; convert offline with a script if no decoder fits.
-- [ ] No crackle/drift; pause on suspend; volume settings respected.
+## Corrida #1 en consola: qué mirar
 
-### Phase 9: Videos / FMV
-- [ ] Inventory `.m4v`/`.mp4` in the bundle; `MPMoviePlayerController` shim → `sceAvPlayer`.
-- [ ] Button skip and graceful skip when the video is missing (never hang on black screen).
+1. Arranca y muestra logos + título (si no: `ux0:data/ironman2/logs/ironman2_NNN.log` + `.psp2dmp`).
+   El log debe decir `VFP vector -> NEON: 162 bloques` y `binds: 6013 slots, 0 imports sin implementar`.
+2. Texturas del menú Flash (incluidas las PVRTC) se ven bien; colores correctos.
+3. Tocar la pantalla pasa del título al menú; los botones del menú responden.
+4. Música del menú (`m_title_menu.www`) y efectos.
+5. fps (línea `PERF` del log).
+6. Entrar a una misión: anotar dónde queda el joystick virtual y los botones del HUD para `controls.txt`.
 
-### Phase 10: Assets, data, language and saves
-- [ ] `NSHomeDirectory()`/`Documents`/`Library/Caches` → `ux0:data/ironman2/saves/`; bundle reads → `game_app/`.
-- [ ] Boot checker: if `game_app/IronMan2` or `rebase.bin` is missing, show a dialog with the exact path.
-- [ ] `NSLocale preferredLanguages` / `AppleLanguages` → Vita system language (`sceAppUtilSystemParamGetById`), English fallback.
-- [ ] Saves survive restart and suspend.
+## Corrida #2 en consola (menú → elegir misión)
 
-### Phase 11: Performance
-- [ ] 444/222/222/166 clocks at boot (already in `main.c`); optional PSVshell note in README.
-- [ ] Stable frame time (`psvita-toolkit perf-telemetry`), memory under control (`psvita-toolkit mem-profile`), long session without leaks.
+- Llega al menú y a la selección de traje. Al confirmar, el watchdog (8 s sin present) mató el proceso:
+  en el dump el hilo principal estaba ocioso en el run loop y el hilo del juego (0x52AF8) en `fopen`
+  cargando la misión — no era un cuelgue. El watchdog ahora solo salta si tampoco hay aperturas de
+  archivo (`darwin_io_ops`) y loguea el último archivo abierto.
+- LiveArea: borrado el "Touch the screen to continue" de `bg0.png` y `pic0.png`.
 
-### Phase 12: Configurator and options
-- [ ] Persistent settings in `saves/` (deadzones, sensitivity, FPS lock, filter, touch overlay).
+## Corrida #3 en consola (ingame, nivel 1 Expo)
 
-### Phase 13: Trophies
-- [ ] Map GameKit achievements (if `GameKit` is linked, grep `reportAchievement`/`GKAchievement`) to `sceNpTrophy` unlocks; otherwise a short achievable list.
+- Ingame a 35-40 fps estable; el tiempo es del juego (`resto (juego)` ~22 ms), no de GL.
+- Tirones: Vox reabre `sfx_*.www` desde ux0 en cada disparo → quedan en RAM (16 MB en total).
+- Carga en 20% (~67 s): Vox abre los ~780 `.www` dos veces cada uno; el `fopen` de newlib hace getstat
+  (`__is_dir`) + `sceIoOpen` y cada búsqueda en el directorio del bundle cuesta decenas de ms (sin relación con
+  el tamaño). `mf_open` (`darwin.c`): un solo `sceIoOpen`, archivos ≤256 KB leídos enteros y la reapertura
+  inmediata desde RAM (`fopencookie`); los grandes van directo a `sceIo` con buffer de 64 KB. `PORT_GL_DIAG 0` (sin trazas/capturas TGA). Build `--preset release`
+  (sin `l_debug` de cada fopen).
+- Controles: `CAMERA x y r` nuevo (stick derecho = swipe de cámara). `controls.txt` con joystick (49,254),
+  ataque (388,250) y pausa (24,26) sacados de los toques del log sobre `frame_lit_2.tga`. Falta ubicar
+  misil/escudo/unibeam (captura en combate).
 
-### Phase 14: LiveArea and VPK
-- [ ] `icon0.png` 128x128, `bg.png` 840x500, `startup.png` 280x158 (8-bit indexed) -- `psvita-toolkit livearea --validate`.
-- [ ] `param.sfo` with Title ID `IRONMAN02`; VPK installs without warnings.
+## Pendiente
 
-### Phase 15: Real-hardware testing and release
-- [ ] Full playthrough without crashes; suspend/resume OK; Vita 1000/2000/PSTV status stated.
-- [ ] Production build: `PORT_TRACE=OFF` or `psvita-toolkit log-trace --remove`.
-- [ ] README states the exact IPA version tested and that the user must supply a **decrypted** IPA.
+- [ ] `controls.txt` con el joystick virtual (`STICK x y r`) y botones del HUD: falta ver el HUD en partida.
+- [ ] `NSDateFormatter` (`setDateFormat:`/`stringFromDate:`) y `-[NSData initWithContentsOfURL:]` devuelven nil
+      (solo los usa el envío de info de Gameloft, sin red).
+- [x] `glGetIntegerv(GL_MAX_PALETTE_MATRICES_OES / GL_MAX_VERTEX_UNITS_OES)` → 9 / 3 (SGX535); antes
+      GL_INVALID_ENUM. Solo en este port: subirlo al maestro cuando termine el trabajo GLES2 en curso allá.
+- [ ] Subir al maestro (Ferrari) lo genérico: ya copiados allá (sin commit) imports nuevos, traducciones
+      VFP→NEON, `ios_prep.py` y log de `fopen`; falta `gles.c` (paleta) y el hosttest como plantilla.
+- [ ] Trofeos.

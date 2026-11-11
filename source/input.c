@@ -7,6 +7,7 @@
 //     CROSS 420 260
 //     RTRIGGER 440 160
 // Se edita por FTP sin recompilar. SELECT+START (2 s) cambia la rotación y la guarda.
+#include <math.h>
 #include <psp2/ctrl.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/touch.h>
@@ -48,6 +49,26 @@ static int nbinds;
 static float pad_x, pad_y, pad_r;
 static int pad_down;
 #define PAD_FINGER (BTN_FINGER0 + MAX_BIND)
+// CAMERA x y r [v]: stick derecho = deslizar el dedo alrededor de (x,y) lógicos (cámara por swipe) a v px/s
+// con el stick a fondo. Cada swipe arranca del lado opuesto del ancla y la cruza (2r de recorrido); al pasarse
+// r del otro lado se levanta y vuelve a apoyarse (pocas re-apoyadas = sin cortes ni toques sueltos).
+static float cam_x, cam_y, cam_r, cam_v = 400, cam_dx, cam_dy;
+static int cam_down;
+static uint64_t cam_t;
+
+// Zona muerta radial + curva: la inclinación útil se re-escala a [0,1] y llega a 1 antes del tope físico
+// (al ~85%), así correr no exige empujar el stick hasta el borde.
+static void stick_curve(float *x, float *y, float dz) {
+    float m = sqrtf(*x * *x + *y * *y);
+    if (m < dz) {
+        *x = *y = 0;
+        return;
+    }
+    float k = (m - dz) / (0.85f - dz);
+    k = (k > 1 ? 1 : k) / m;
+    *x *= k, *y *= k;
+}
+#define CAM_FINGER (PAD_FINGER + 1)
 
 static void load_controls(void) {
     FILE *f = fopen(DATA_PATH "controls.txt", "r");
@@ -60,12 +81,14 @@ static void load_controls(void) {
     while (fgets(line, sizeof(line), f))
         if (sscanf(line, "STICK %f %f %f", &x, &y, &r) == 3)
             pad_x = x, pad_y = y, pad_r = r;
+        else if (sscanf(line, "CAMERA %f %f %f", &x, &y, &r) == 3)
+            cam_x = x, cam_y = y, cam_r = r, sscanf(line, "CAMERA %*f %*f %*f %f", &cam_v);
         else if (line[0] != '#' && nbinds < MAX_BIND && sscanf(line, "%31s %f %f", n, &x, &y) == 3)
             for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++)
                 if (!strcmp(n, names[i].name))
                     binds[nbinds++] = (typeof(binds[0])){names[i].mask, x, y};
     fclose(f);
-    l_info("controls.txt: %d botones%s", nbinds, pad_r > 0 ? " + STICK" : "");
+    l_info("controls.txt: %d botones%s%s", nbinds, pad_r > 0 ? " + STICK" : "", cam_r > 0 ? " + CAMERA" : "");
 }
 
 void input_init(void) {
@@ -170,10 +193,9 @@ void input_poll(void) {
         ui_touch_event(BTN_FINGER0 + i, (b & binds[i].mask) ? 0 : 3, vx, vy);
     }
     if (pad_r > 0) {
-        float px = stick_x, py = stick_y;
+        float px = (pad.lx - 128) / 127.0f, py = (pad.ly - 128) / 127.0f;
         int dx = !!(b & SCE_CTRL_RIGHT) - !!(b & SCE_CTRL_LEFT), dy = !!(b & SCE_CTRL_DOWN) - !!(b & SCE_CTRL_UP);
-        if (px * px + py * py < 0.35f * 0.35f) // zona muerta grande: un dedo fantasma bloquea el toque real
-            px = py = 0;
+        stick_curve(&px, &py, 0.2f); // zona muerta: un dedo fantasma por deriva del stick bloquea el toque real
         if (dx || dy)
             px = dx * (dy ? 0.707f : 1), py = dy * (dx ? 0.707f : 1);
         int on = px != 0 || py != 0;
@@ -183,6 +205,34 @@ void input_poll(void) {
             to_view((pad_x + px * pad_r) / lw, (pad_y + py * pad_r) / lh, &vx, &vy);
             ui_touch_event(PAD_FINGER, on ? (pad_down ? 1 : 0) : 3, vx, vy);
             pad_down = on;
+        }
+    }
+    if (cam_r > 0) {
+        float rx = (pad.rx - 128) / 127.0f, ry = (pad.ry - 128) / 127.0f;
+        stick_curve(&rx, &ry, 0.15f);
+        float lw, lh, vx, vy;
+        logical_size(&lw, &lh);
+        uint64_t t = sceKernelGetProcessTimeWide();
+        float dt = cam_t && t - cam_t < 100000 ? (t - cam_t) / 1e6f : 1 / 60.0f;
+        cam_t = t;
+        if (rx || ry) {
+            if (cam_down && cam_dx * cam_dx + cam_dy * cam_dy > cam_r * cam_r && cam_dx * rx + cam_dy * ry > 0) {
+                ui_touch_event(CAM_FINGER, 3, -1, -1); // fin de un swipe: re-apoyar
+                cam_down = 0;
+            }
+            if (!cam_down) {
+                float m = sqrtf(rx * rx + ry * ry);
+                cam_dx = -rx / m * cam_r * 0.9f, cam_dy = -ry / m * cam_r * 0.9f;
+                to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
+                ui_touch_event(CAM_FINGER, 0, vx, vy);
+                cam_down = 1;
+            }
+            cam_dx += rx * cam_v * dt, cam_dy += ry * cam_v * dt;
+            to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
+            ui_touch_event(CAM_FINGER, 1, vx, vy);
+        } else if (cam_down) {
+            ui_touch_event(CAM_FINGER, 3, -1, -1);
+            cam_down = 0;
         }
     }
     // SELECT+START sostenidos 2 s: rotación siguiente (se guarda).

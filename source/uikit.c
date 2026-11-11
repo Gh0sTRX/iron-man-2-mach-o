@@ -20,6 +20,7 @@
 #include <vitaGL.h>
 
 #include "cgbi.h"
+#include "darwin.h"
 #include "foundation.h"
 #include "gles.h"
 #include "hle.h"
@@ -480,7 +481,7 @@ static const nmethod uievent_i[] = {
     NM("allTouches", ev_allTouches), NM("touchesForView:", ev_touchesForView), NM("touchesForWindow:", ev_touchesForView),
     NM("timestamp", ev_time), NM("type", ap_zero), {0}};
 
-#define MAX_TOUCH 9 // 2 reales + 6 botones + dedo del STICK (input.c)
+#define MAX_TOUCH 10 // 2 reales + 6 botones + dedo del STICK + dedo de CAMERA (input.c)
 static ui_touch *live[MAX_TOUCH]; // por id de dedo (input.c)
 static id touch_event;
 
@@ -1443,17 +1444,22 @@ void ui_runloop_tick(double max_wait) {
 // que no vuelve), el bucle de abajo no corre y un watchdog ahí no salta (Real Soccer: congelado tras el saque
 // inicial, sin dump). 8 s sin presentar tras el primer frame -> crash deliberado en ESTE hilo; el .psp2dmp trae
 // PC/LR de todos los hilos (buscar el hilo principal). Quitar cuando no haga falta.
+#ifndef WATCHDOG_S
+#define WATCHDOG_S 8 // hosttest: 60 (emulado a ~2 fps, un present puede tardar varios segundos)
+#endif
 static int wd_thread(SceSize args, void *argp) {
-    unsigned last = 0;
+    unsigned last = 0, last_io = 0;
     uint64_t since = sceKernelGetProcessTimeWide();
     for (;;) {
         sceKernelDelayThread(500000);
         uint64_t now = sceKernelGetProcessTimeWide();
-        if (frames != last || !frames) {
-            last = frames, since = now;
-        } else if (now - since > 8 * 1000000ULL) {
-            l_error("[WATCHDOG] 8 s sin presentRenderbuffer (frames=%u%s): crash deliberado para el dump", (unsigned)frames,
-                    in_present ? ", dentro de present" : "");
+        // Abrir archivos = cargando (Iron Man 2: entrar a misión no presenta frames durante >8 s mientras el
+        // hilo del juego lee del ux0). Solo cuenta como cuelgue sin present Y sin E/S.
+        if (frames != last || !frames || darwin_io_ops != last_io) {
+            last = frames, last_io = darwin_io_ops, since = now;
+        } else if (now - since > WATCHDOG_S * 1000000ULL) {
+            l_error("[WATCHDOG] %d s sin presentRenderbuffer ni E/S (frames=%u%s, último archivo %s): crash deliberado para el dump",
+                    WATCHDOG_S, (unsigned)frames, in_present ? ", dentro de present" : "", darwin_last_open);
             sceKernelDelayThread(200000); // que llegue el log
             *(volatile int *)0 = 0;
         }

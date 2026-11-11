@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <locale.h>
 #include <math.h>
+#include <psp2/io/fcntl.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
 #include <pthread.h>
@@ -25,6 +26,7 @@
 
 extern void *__dynamic_cast(const void *, const void *, const void *, long); // libsupc++
 
+#include "darwin.h"
 #include "darwin_printf.h"
 #include "hle.h"
 #include "imports.h"
@@ -72,9 +74,158 @@ const char *darwin_path(const char *in, char *out, size_t outlen) {
 }
 #define PATH(p) char path_buf[512]; const char *P = darwin_path(p, path_buf, sizeof(path_buf))
 
+volatile unsigned darwin_io_ops;
+char darwin_last_open[128];
+static void note_open(const char *p) {
+    darwin_io_ops++;
+    snprintf(darwin_last_open, sizeof(darwin_last_open), "%s", p); // ponytail: sin lock, solo para el log del watchdog
+}
+// Lectura rápida de archivos ("r"/"rb"). Al entrar a una misión (pantalla de carga en 20%) Vox carga los ~780
+// .www abriendo cada uno DOS veces seguidas; el fopen de newlib hace getstat (__is_dir) + sceIoOpen, y cada
+// búsqueda en el directorio de ~1000 archivos del bundle cuesta decenas de ms (~90 ms por archivo, ~67 s).
+// Acá: un solo sceIoOpen; los archivos chicos se leen enteros de una vez y la reapertura inmediata sale de RAM.
+// Los sfx_*.www quedan en RAM para siempre: Vox los reabre en cada disparo (tirones en combate).
+// FILE con fopencookie: el juego solo usa fread/fseek/ftell/getc/fgets/feof, nunca fileno/fstat.
+#define MF_SMALL (256 * 1024)
+#define SFX_MAX_TOTAL (16 * 1024 * 1024) // ponytail: sin desalojo; al llenarse los sfx van por el slot común
+#if defined(__LARGE64_FILES) || defined(__GLIBC__)
+typedef long long mf_off;
+#else
+typedef off_t mf_off;
+#endif
+typedef struct mf_entry {
+    char *path, *data;
+    size_t size;
+    int refs;
+    struct mf_entry *next;
+} mf_entry;
+typedef struct {
+    mf_entry *e; // archivo chico en RAM, o
+    SceUID fd;   // grande: directo a sceIo
+    long long pos;
+} mf_file;
+static mf_entry *sfx_cache, *mf_last; // sfx permanentes + el último archivo chico leído (reapertura inmediata)
+static size_t sfx_total;
+static pthread_mutex_t mf_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void mf_unref(mf_entry *e) { // con mf_lock
+    if (--e->refs == 0) {
+        free(e->path), free(e->data), free(e);
+    }
+}
+static ssize_t mf_read(void *c, char *buf, size_t n) {
+    mf_file *m = c;
+    if (!m->e) {
+        int r = sceIoRead(m->fd, buf, n);
+        return r < 0 ? -1 : r;
+    }
+    if (m->pos >= (long long)m->e->size)
+        return 0;
+    if (n > m->e->size - m->pos)
+        n = m->e->size - m->pos;
+    memcpy(buf, m->e->data + m->pos, n);
+    m->pos += n;
+    return n;
+}
+static int mf_seek(void *c, mf_off *off, int whence) {
+    mf_file *m = c;
+    if (!m->e) {
+        long long r = sceIoLseek(m->fd, *off, whence);
+        if (r < 0)
+            return -1;
+        *off = r;
+        return 0;
+    }
+    long long p = whence == SEEK_SET ? 0 : whence == SEEK_CUR ? m->pos : (long long)m->e->size;
+    p += *off;
+    if (p < 0)
+        return -1;
+    *off = m->pos = p;
+    return 0;
+}
+static int mf_close(void *c) {
+    mf_file *m = c;
+    if (m->e) {
+        pthread_mutex_lock(&mf_lock);
+        mf_unref(m->e);
+        pthread_mutex_unlock(&mf_lock);
+    } else {
+        sceIoClose(m->fd);
+    }
+    free(m);
+    return 0;
+}
+static mf_entry *mf_find(const char *p) { // con mf_lock
+    for (mf_entry *e = sfx_cache; e; e = e->next)
+        if (!strcmp(e->path, p))
+            return e;
+    return mf_last && !strcmp(mf_last->path, p) ? mf_last : NULL;
+}
+static int is_sfx(const char *p) {
+    const char *b = strrchr(p, '/'), *e = strrchr(p, '.');
+    return b && !strncmp(b + 1, "sfx_", 4) && e && !strcmp(e, ".www");
+}
+// NULL = que lo intente fopen (no existe, es un directorio, error de lectura)
+static FILE *mf_open(const char *p) {
+    mf_file *m = calloc(1, sizeof(*m));
+    if (!m)
+        return NULL;
+    pthread_mutex_lock(&mf_lock);
+    mf_entry *e = mf_find(p);
+    if (!e) {
+        SceUID fd = sceIoOpen(p, SCE_O_RDONLY, 0);
+        long long size = fd < 0 ? -1 : sceIoLseek(fd, 0, SCE_SEEK_END);
+        if (size < 0 || sceIoLseek(fd, 0, SCE_SEEK_SET) < 0) {
+            if (fd >= 0)
+                sceIoClose(fd);
+            pthread_mutex_unlock(&mf_lock);
+            free(m);
+            return NULL;
+        }
+        if (size > MF_SMALL) {
+            m->fd = fd;
+        } else {
+            e = calloc(1, sizeof(*e));
+            char *d = malloc(size ? size : 1);
+            int ok = e && d && (e->path = strdup(p)) && sceIoRead(fd, d, size) == size;
+            sceIoClose(fd);
+            if (!ok) {
+                if (e)
+                    free(e->path);
+                free(e), free(d);
+                pthread_mutex_unlock(&mf_lock);
+                free(m);
+                return NULL;
+            }
+            e->data = d, e->size = size, e->refs = 1; // la ref del caché
+            if (is_sfx(p) && sfx_total + size <= SFX_MAX_TOTAL) {
+                e->next = sfx_cache, sfx_cache = e, sfx_total += size;
+            } else {
+                if (mf_last)
+                    mf_unref(mf_last);
+                mf_last = e;
+            }
+        }
+    }
+    if (e)
+        e->refs++, m->e = e; // la ref de este FILE
+    pthread_mutex_unlock(&mf_lock);
+    FILE *f = fopencookie(m, "rb", (cookie_io_functions_t){mf_read, NULL, mf_seek, mf_close});
+    if (!f) {
+        mf_close(m);
+        return NULL;
+    }
+    if (!m->e)
+        setvbuf(f, NULL, _IOFBF, 64 * 1024); // streams de música: menos syscalls que el BUFSIZ de 1 KB
+    return f;
+}
 static FILE *d_fopen(const char *path, const char *mode) {
     PATH(path);
-    FILE *f = fopen(P, mode);
+    note_open(P);
+    FILE *f = !strcmp(mode, "rb") || !strcmp(mode, "r") ? mf_open(P) : NULL;
+    if (f)
+        return f;
+    f = fopen(P, mode);
     if (!f)
         l_info("fopen(%s, %s) falló", P, mode); // archivo que el juego espera y no está
     l_debug("fopen(%s, %s) -> %p", P, mode, f);
@@ -124,6 +275,7 @@ static char *d_realpath(const char *path, char *out) {
 }
 static int d_open(const char *path, int flags, int mode) {
     PATH(path);
+    note_open(P);
     // O_CREAT/O_TRUNC/O_APPEND de Darwin (0x200/0x400/0x8) -> newlib
     int f = flags & 3;
     if (flags & 0x200)

@@ -1,8 +1,12 @@
-# Botón -> toque en la pantalla, en coordenadas de lo que se ve (480x320 si el juego es apaisado,
-# 320x480 si es vertical; origen arriba a la izquierda). Máximo 6 líneas. Se edita por FTP en
-# ux0:data/<slug>/controls.txt sin recompilar. El stick izquierdo es el acelerómetro (inclinación).
+# Botón -> toque en la pantalla, en coordenadas de lo que se ve (480x320, origen arriba a la izquierda).
+# Máximo 6 botones. Se edita por FTP en ux0:data/ironman2/controls.txt sin recompilar.
+# STICK x y r: stick izquierdo / cruceta = dedo arrastrado alrededor de (x,y) (joystick virtual).
+# CAMERA x y r [v]: stick derecho = deslizar alrededor de (x,y), v px/s a fondo (cámara; subir v = más rápida).
 # SELECT+START sostenidos 2 s cambian la rotación de la imagen (se guarda en rotation.txt).
-CROSS 430 270
+# Posiciones sacadas de los toques en partida (corrida 002); faltan misil/escudo/unibeam.
+STICK 55 250 55
+CAMERA 320 150 110 450
+CROSS 388 250
 CIRCLE 50 270
-SQUARE 430 50
-START 240 160
+START 24 26
+SELECT 240 160

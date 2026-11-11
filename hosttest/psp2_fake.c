@@ -305,7 +305,7 @@ static int script_hit(const char *env, int fields, int *a, int *b)
     double t = script_t(), at, dur;
     while (s && *s) {
         int x = 0, y = 0;
-        if (fields == 3 && sscanf(s, "%lf:%d:%d", &at, &x, &y) == 3) dur = 0.5;
+        if (fields == 3 && sscanf(s, "%lf:%d:%d", &at, &x, &y) == 3) dur = getenv("HOSTTEST_TAP_S") ? atof(getenv("HOSTTEST_TAP_S")) : 0.5; /* a 2 fps 0,5 s cae en un solo frame */
         else if (fields == 2 && sscanf(s, "%lf:%x:%lf", &at, &x, &dur) == 3) y = 0;
         else return 0;
         if (t >= at && t < at + dur) { *a = x; *b = y; return 1; }

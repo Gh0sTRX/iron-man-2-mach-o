@@ -16,7 +16,7 @@ target_include_directories(ironman2 PRIVATE
 # Como en la Vita: ABI softfp del código iOS, r9 reservado, Cortex-A9 con NEON.
 set(FLAGS -march=armv7-a -mfpu=neon -mfloat-abi=softfp -ffixed-r9)
 target_compile_options(ironman2 PRIVATE ${FLAGS} -O2 -g -w)
-target_compile_definitions(ironman2 PRIVATE ${HT_DEFS} SKIP_SPLASHSCREEN _GNU_SOURCE _FILE_OFFSET_BITS=64 _TIME_BITS=64
+target_compile_definitions(ironman2 PRIVATE ${HT_DEFS} WATCHDOG_S=60 SKIP_SPLASHSCREEN _GNU_SOURCE _FILE_OFFSET_BITS=64 _TIME_BITS=64
   DATA_PATH="ux0:data/ironman2/")
 # usan SceIoStat.st_mtime (include/sys/stat.h)
 set_source_files_properties("${SRC}/objc.c" "${SRC}/main.c" PROPERTIES COMPILE_DEFINITIONS HOSTTEST_SCE_STAT)

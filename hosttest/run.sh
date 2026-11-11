@@ -38,7 +38,7 @@ run)
   if [ -n "${HOSTTEST_WINDOW:-}" ]; then WINDOW="-e DISPLAY=host.docker.internal:0"; fi
   # Datos del juego (escribibles como en la Vita: el motor escribe .\\SaiSave.log en game_app/);
   # logs/saves/frames en build/hosttest-data.
-  docker run --rm --platform linux/arm/v5 $WINDOW -e HOSTTEST_FRAME_S -e HOSTTEST_TAPS -e HOSTTEST_PAD \
+  docker run --rm --platform linux/arm/v5 $WINDOW -e HOSTTEST_FRAME_S -e HOSTTEST_TAP_S -e HOSTTEST_TAPS -e HOSTTEST_PAD \
     -e ALSOFT_DRIVERS=null -e EGL_PLATFORM=surfaceless -e LIBGL_ALWAYS_SOFTWARE=1 \
     -v "$VOLUME":/build:ro -v "$ROOT/ux0_data/ironman2":/game -v "$DATA":/data \
     "$RUNIMAGE" sh -c '

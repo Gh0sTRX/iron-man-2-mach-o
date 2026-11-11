@@ -766,6 +766,12 @@ static void g_glGetIntegerv(GLenum pname, GLint *v) {
         *v = 2048;
         return;
     }
+    // matrix palette emulada en CPU (vitaGL no conoce estos enums): valores del SGX535 del iPhone 3GS.
+    // Iron Man 2 (Irrlicht CColladaSkinnedMesh) los consulta al iniciar el driver.
+    if (pname == 0x8842 /* GL_MAX_PALETTE_MATRICES_OES */ || pname == 0x86A4 /* GL_MAX_VERTEX_UNITS_OES */) {
+        *v = pname == 0x8842 ? 9 : 3;
+        return;
+    }
     glGetIntegerv(pname, v);
     chk("glGetIntegerv", pname, 0);
 }
