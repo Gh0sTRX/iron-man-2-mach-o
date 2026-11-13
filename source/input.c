@@ -1,0 +1,278 @@
+// Touch frontal + botones de la Vita -> toques de UIKit (uikit.c) en coordenadas de la vista.
+//
+// La pantalla muestra el drawable girado/escalado (gles_present); acá se hace el mapeo inverso:
+// punto de pantalla -> normalizado en el rectángulo destino -> coordenadas de la vista de iOS.
+// Botones: cada uno "toca" un punto configurable en ux0:data/<slug>/controls.txt, en coordenadas
+// lógicas de lo que se ve (p. ej. 480x320 para un juego apaisado):
+//     CROSS 420 260
+//     RTRIGGER 440 160
+// Se edita por FTP sin recompilar. SELECT+START (2 s) cambia la rotación y la guarda.
+#include <math.h>
+#include <psp2/ctrl.h>
+#include <psp2/kernel/processmgr.h>
+#include <psp2/touch.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "gles.h"
+#include "hle.h"
+#include "input.h"
+#include "log.h"
+
+#define FINGERS 6
+#define BTN_FINGER0 2 // los botones usan dedos virtuales 2..7 (los reales, 0..1)
+extern int port_rotation, port_stretch;
+
+static struct {
+    int id, down;
+} fingers[2];
+static uint32_t prev_buttons;
+static float stick_x, stick_y;
+static uint64_t combo_since;
+
+static const struct {
+    const char *name;
+    uint32_t mask;
+} names[] = {
+    {"CROSS", SCE_CTRL_CROSS},       {"CIRCLE", SCE_CTRL_CIRCLE}, {"SQUARE", SCE_CTRL_SQUARE},
+    {"TRIANGLE", SCE_CTRL_TRIANGLE}, {"LTRIGGER", SCE_CTRL_LTRIGGER}, {"RTRIGGER", SCE_CTRL_RTRIGGER},
+    {"START", SCE_CTRL_START},       {"SELECT", SCE_CTRL_SELECT}, {"UP", SCE_CTRL_UP},
+    {"DOWN", SCE_CTRL_DOWN},         {"LEFT", SCE_CTRL_LEFT},     {"RIGHT", SCE_CTRL_RIGHT},
+};
+#define MAX_BIND 12
+static struct {
+    uint32_t mask;
+    float x, y; // lógicas (lo que se ve)
+} binds[MAX_BIND];
+static int nbinds;
+// STICK x y r: stick izquierdo / cruceta = dedo virtual arrastrado alrededor de (x,y) lógicos (pad táctil).
+static float pad_x, pad_y, pad_r;
+static int pad_down;
+static uint64_t pad_active, pad_up; // última lectura con el stick inclinado / último soltar del dedo
+#define PAD_FINGER (BTN_FINGER0 + MAX_BIND)
+// CAMERA x y r [v]: stick derecho = deslizar el dedo alrededor de (x,y) lógicos (cámara por swipe) a v px/s
+// con el stick a fondo. Cada swipe arranca del lado opuesto del ancla y la cruza (2r de recorrido); al pasarse
+// r del otro lado se levanta y vuelve a apoyarse (pocas re-apoyadas = sin cortes ni toques sueltos).
+static float cam_x, cam_y, cam_r, cam_v = 400, cam_dx, cam_dy;
+static int cam_down;
+static uint64_t cam_t;
+
+// Zona muerta radial + curva: la inclinación útil se re-escala a [0,1] y llega a 1 antes del tope físico
+// (al ~85%), así correr no exige empujar el stick hasta el borde.
+static void stick_curve(float *x, float *y, float dz) {
+    float m = sqrtf(*x * *x + *y * *y);
+    if (m < dz) {
+        *x = *y = 0;
+        return;
+    }
+    float k = (m - dz) / (0.85f - dz);
+    k = (k > 1 ? 1 : k) / m;
+    *x *= k, *y *= k;
+}
+#define CAM_FINGER (PAD_FINGER + 1)
+
+static void load_controls(void) {
+    FILE *f = fopen(DATA_PATH "controls.txt", "r");
+    if (!f) {
+        l_info("sin controls.txt: solo touch + stick (acelerómetro)");
+        return;
+    }
+    char line[96], n[32];
+    float x, y, r;
+    while (fgets(line, sizeof(line), f))
+        if (sscanf(line, "STRETCH %f", &x) == 1)
+            port_stretch = x != 0;
+        else if (sscanf(line, "STICK %f %f %f", &x, &y, &r) == 3)
+            pad_x = x, pad_y = y, pad_r = r;
+        else if (sscanf(line, "CAMERA %f %f %f", &x, &y, &r) == 3)
+            cam_x = x, cam_y = y, cam_r = r, sscanf(line, "CAMERA %*f %*f %*f %f", &cam_v);
+        else if (line[0] != '#' && nbinds < MAX_BIND && sscanf(line, "%31s %f %f", n, &x, &y) == 3)
+            for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+                if (!strcmp(n, names[i].name))
+                    binds[nbinds++] = (typeof(binds[0])){names[i].mask, x, y};
+    fclose(f);
+    l_info("controls.txt: %d botones%s%s%s", nbinds, pad_r > 0 ? " + STICK" : "", cam_r > 0 ? " + CAMERA" : "",
+           port_stretch ? " + STRETCH" : "");
+}
+
+void input_init(void) {
+    sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
+    sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
+    FILE *f = fopen(DATA_PATH "rotation.txt", "r");
+    if (f) {
+        int r;
+        if (fscanf(f, "%d", &r) == 1 && r >= 0 && r <= 2)
+            port_rotation = r;
+        fclose(f);
+    }
+    load_controls();
+}
+
+void input_stick(float *x, float *y) {
+    *x = stick_x;
+    *y = stick_y;
+}
+
+// Normalizado [0,1] en lo que se ve -> coordenadas de la vista (ver uv_rot en gles.c).
+static void to_view(float nx, float ny, float *vx, float *vy) {
+    switch (gles_rotation()) {
+    case 1:
+        *vx = (1 - ny) * fb_w, *vy = nx * fb_h;
+        break;
+    case 2:
+        *vx = ny * fb_w, *vy = (1 - nx) * fb_h;
+        break;
+    default:
+        *vx = nx * fb_w, *vy = ny * fb_h;
+    }
+}
+
+static int screen_to_view(int sx, int sy, float *vx, float *vy) {
+    int dx, dy, dw, dh;
+    gles_dest_rect(&dx, &dy, &dw, &dh);
+    float nx = (sx - dx) / (float)dw, ny = (sy - dy) / (float)dh;
+    if (nx < 0 || nx > 1 || ny < 0 || ny > 1)
+        return 0;
+    to_view(nx, ny, vx, vy);
+    return 1;
+}
+
+static void logical_size(float *w, float *h) {
+    *w = gles_rotation() ? fb_h : fb_w;
+    *h = gles_rotation() ? fb_w : fb_h;
+}
+
+void input_poll(void) {
+    SceTouchData t;
+    if (sceTouchPeek(SCE_TOUCH_PORT_FRONT, &t, 1) < 1)
+        t.reportNum = 0;
+    // dos dedos como máximo (los juegos de 2009 rara vez usan más)
+    for (int k = 0; k < 2; k++) {
+        int found = -1;
+        for (int i = 0; i < (int)t.reportNum; i++)
+            if (fingers[k].down && t.report[i].id == fingers[k].id)
+                found = i;
+        if (fingers[k].down && found < 0) {
+            fingers[k].down = 0;
+            ui_touch_event(k, 3, -1, -1);
+        }
+    }
+    for (int i = 0; i < (int)t.reportNum && i < 2; i++) {
+        float vx, vy;
+        if (!screen_to_view(t.report[i].x / 2, t.report[i].y / 2, &vx, &vy))
+            continue;
+        int k = -1;
+        for (int j = 0; j < 2; j++)
+            if (fingers[j].down && fingers[j].id == t.report[i].id)
+                k = j;
+        if (k < 0) {
+            for (int j = 0; j < 2 && k < 0; j++)
+                if (!fingers[j].down)
+                    k = j;
+            if (k < 0)
+                continue;
+            fingers[k].down = 1;
+            fingers[k].id = t.report[i].id;
+            ui_touch_event(k, 0, vx, vy);
+        } else {
+            ui_touch_event(k, 1, vx, vy);
+        }
+    }
+
+    SceCtrlData pad;
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    stick_x = (pad.lx - 128) / 127.0f;
+    stick_y = (pad.ly - 128) / 127.0f;
+    if (stick_x > -0.12f && stick_x < 0.12f)
+        stick_x = 0;
+    if (stick_y > -0.12f && stick_y < 0.12f)
+        stick_y = 0;
+    uint32_t b = pad.buttons, changed = b ^ prev_buttons;
+    for (int i = 0; i < nbinds; i++) {
+        if (!(changed & binds[i].mask))
+            continue;
+        float lw, lh, vx, vy;
+        logical_size(&lw, &lh);
+        to_view(binds[i].x / lw, binds[i].y / lh, &vx, &vy);
+        ui_touch_event(BTN_FINGER0 + i, (b & binds[i].mask) ? 0 : 3, vx, vy);
+    }
+    if (pad_r > 0) {
+        float px = (pad.lx - 128) / 127.0f, py = (pad.ly - 128) / 127.0f;
+        int dx = !!(b & SCE_CTRL_RIGHT) - !!(b & SCE_CTRL_LEFT), dy = !!(b & SCE_CTRL_DOWN) - !!(b & SCE_CTRL_UP);
+        stick_curve(&px, &py, 0.2f); // zona muerta: un dedo fantasma por deriva del stick bloquea el toque real
+        if (dx || dy)
+            px = dx * (dy ? 0.707f : 1), py = dy * (dx ? 0.707f : 1);
+        int on = px != 0 || py != 0;
+        // JoystickButton::OnTouchDown (0x1c600) toma un toque que baja <=500 ms después del último soltar como
+        // doble toque, y un toque que baja fuera del círculo (stick ya inclinado) el joystick no lo agarra. El dedo baja
+        // siempre en el centro, queda ahí 1 s con el stick suelto y no vuelve a bajar antes de 550 ms.
+        uint64_t now = sceKernelGetProcessTimeWide();
+        if (on)
+            pad_active = now;
+        float lw, lh, vx, vy;
+        logical_size(&lw, &lh);
+        if (on && !pad_down && now - pad_up > 550000) {
+            to_view(pad_x / lw, pad_y / lh, &vx, &vy);
+            ui_touch_event(PAD_FINGER, 0, vx, vy);
+            pad_down = 1;
+        }
+        if (pad_down && now - pad_active > 1000000) {
+            ui_touch_event(PAD_FINGER, 3, -1, -1);
+            pad_down = 0;
+            pad_up = now;
+        } else if (pad_down) {
+            to_view((pad_x + px * pad_r) / lw, (pad_y + py * pad_r) / lh, &vx, &vy);
+            ui_touch_event(PAD_FINGER, 1, vx, vy);
+        }
+    }
+    if (cam_r > 0) {
+        float rx = (pad.rx - 128) / 127.0f, ry = (pad.ry - 128) / 127.0f;
+        stick_curve(&rx, &ry, 0.15f);
+        float lw, lh, vx, vy;
+        logical_size(&lw, &lh);
+        uint64_t t = sceKernelGetProcessTimeWide();
+        float dt = cam_t && t - cam_t < 100000 ? (t - cam_t) / 1e6f : 1 / 60.0f;
+        cam_t = t;
+        if (rx || ry) {
+            if (cam_down && cam_dx * cam_dx + cam_dy * cam_dy > cam_r * cam_r && cam_dx * rx + cam_dy * ry > 0) {
+                // fin de un swipe: re-apoyar en la próxima lectura, no en el mismo frame del juego
+                // (ponytail: hipótesis de la QA del 12/11, cámara horizontal que no gira; confirmar en consola)
+                ui_touch_event(CAM_FINGER, 3, -1, -1);
+                cam_down = 0;
+            } else if (!cam_down) {
+                float m = sqrtf(rx * rx + ry * ry);
+                cam_dx = -rx / m * cam_r * 0.9f, cam_dy = -ry / m * cam_r * 0.9f;
+                to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
+                ui_touch_event(CAM_FINGER, 0, vx, vy);
+                cam_down = 1;
+            }
+            if (cam_down) {
+                cam_dx += rx * cam_v * dt, cam_dy += ry * cam_v * dt;
+                to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
+                ui_touch_event(CAM_FINGER, 1, vx, vy);
+            }
+        } else if (cam_down) {
+            ui_touch_event(CAM_FINGER, 3, -1, -1);
+            cam_down = 0;
+        }
+    }
+    // SELECT+START sostenidos 2 s: rotación siguiente (se guarda).
+    uint64_t now = sceKernelGetProcessTimeWide();
+    if ((b & (SCE_CTRL_SELECT | SCE_CTRL_START)) == (SCE_CTRL_SELECT | SCE_CTRL_START)) {
+        if (!combo_since)
+            combo_since = now;
+        else if (now - combo_since > 2000000) {
+            port_rotation = (port_rotation + 1) % 3;
+            combo_since = now + 60000000; // una vez por pulsación
+            FILE *f = fopen(DATA_PATH "rotation.txt", "w");
+            if (f) {
+                fprintf(f, "%d\n", port_rotation);
+                fclose(f);
+            }
+            l_info("rotación -> %d", port_rotation);
+        }
+    } else {
+        combo_since = 0;
+    }
+    prev_buttons = b;
+}
