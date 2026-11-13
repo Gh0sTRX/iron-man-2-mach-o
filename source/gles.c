@@ -937,18 +937,14 @@ extern int ui_status_portrait(void);
 int gles_rotation(void) { return fb_w > fb_h || ui_status_portrait() ? 0 : port_rotation; }
 
 // Rectángulo destino en pantalla (para input.c: mismo mapeo inverso).
+int port_stretch = PORT_STRETCH; // input.c: "STRETCH 1" en controls.txt
 void gles_dest_rect(int *x, int *y, int *w, int *h) {
     int rw = gles_rotation() ? fb_h : fb_w, rh = gles_rotation() ? fb_w : fb_h; // tamaño visto apaisado
-#if PORT_STRETCH
-    (void)rw, (void)rh;
-    *x = 0, *y = 0, *w = SCR_W, *h = SCR_H;
-#else
-    int dw = SCR_H * rw / rh;
+    int dw = port_stretch ? SCR_W : SCR_H * rw / rh;
     if (dw > SCR_W)
         dw = SCR_W;
     *w = dw, *h = SCR_H;
     *x = (SCR_W - dw) / 2, *y = 0;
-#endif
 }
 
 // ---------------------------------------------------------------- diagnóstico (pantalla blanca, corrida 010)

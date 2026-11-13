@@ -21,7 +21,7 @@
 
 #define FINGERS 6
 #define BTN_FINGER0 2 // los botones usan dedos virtuales 2..7 (los reales, 0..1)
-extern int port_rotation;
+extern int port_rotation, port_stretch;
 
 static struct {
     int id, down;
@@ -39,7 +39,7 @@ static const struct {
     {"START", SCE_CTRL_START},       {"SELECT", SCE_CTRL_SELECT}, {"UP", SCE_CTRL_UP},
     {"DOWN", SCE_CTRL_DOWN},         {"LEFT", SCE_CTRL_LEFT},     {"RIGHT", SCE_CTRL_RIGHT},
 };
-#define MAX_BIND 6
+#define MAX_BIND 12
 static struct {
     uint32_t mask;
     float x, y; // lógicas (lo que se ve)
@@ -48,6 +48,7 @@ static int nbinds;
 // STICK x y r: stick izquierdo / cruceta = dedo virtual arrastrado alrededor de (x,y) lógicos (pad táctil).
 static float pad_x, pad_y, pad_r;
 static int pad_down;
+static uint64_t pad_active, pad_up; // última lectura con el stick inclinado / último soltar del dedo
 #define PAD_FINGER (BTN_FINGER0 + MAX_BIND)
 // CAMERA x y r [v]: stick derecho = deslizar el dedo alrededor de (x,y) lógicos (cámara por swipe) a v px/s
 // con el stick a fondo. Cada swipe arranca del lado opuesto del ancla y la cruza (2r de recorrido); al pasarse
@@ -79,7 +80,9 @@ static void load_controls(void) {
     char line[96], n[32];
     float x, y, r;
     while (fgets(line, sizeof(line), f))
-        if (sscanf(line, "STICK %f %f %f", &x, &y, &r) == 3)
+        if (sscanf(line, "STRETCH %f", &x) == 1)
+            port_stretch = x != 0;
+        else if (sscanf(line, "STICK %f %f %f", &x, &y, &r) == 3)
             pad_x = x, pad_y = y, pad_r = r;
         else if (sscanf(line, "CAMERA %f %f %f", &x, &y, &r) == 3)
             cam_x = x, cam_y = y, cam_r = r, sscanf(line, "CAMERA %*f %*f %*f %f", &cam_v);
@@ -88,7 +91,8 @@ static void load_controls(void) {
                 if (!strcmp(n, names[i].name))
                     binds[nbinds++] = (typeof(binds[0])){names[i].mask, x, y};
     fclose(f);
-    l_info("controls.txt: %d botones%s%s", nbinds, pad_r > 0 ? " + STICK" : "", cam_r > 0 ? " + CAMERA" : "");
+    l_info("controls.txt: %d botones%s%s%s", nbinds, pad_r > 0 ? " + STICK" : "", cam_r > 0 ? " + CAMERA" : "",
+           port_stretch ? " + STRETCH" : "");
 }
 
 void input_init(void) {
@@ -199,12 +203,26 @@ void input_poll(void) {
         if (dx || dy)
             px = dx * (dy ? 0.707f : 1), py = dy * (dx ? 0.707f : 1);
         int on = px != 0 || py != 0;
-        if (on || pad_down) {
-            float lw, lh, vx, vy;
-            logical_size(&lw, &lh);
+        // JoystickButton::OnTouchDown (0x1c600) toma un toque que baja <=500 ms después del último soltar como
+        // doble toque, y un toque que baja fuera del círculo (stick ya inclinado) el joystick no lo agarra. El dedo baja
+        // siempre en el centro, queda ahí 1 s con el stick suelto y no vuelve a bajar antes de 550 ms.
+        uint64_t now = sceKernelGetProcessTimeWide();
+        if (on)
+            pad_active = now;
+        float lw, lh, vx, vy;
+        logical_size(&lw, &lh);
+        if (on && !pad_down && now - pad_up > 550000) {
+            to_view(pad_x / lw, pad_y / lh, &vx, &vy);
+            ui_touch_event(PAD_FINGER, 0, vx, vy);
+            pad_down = 1;
+        }
+        if (pad_down && now - pad_active > 1000000) {
+            ui_touch_event(PAD_FINGER, 3, -1, -1);
+            pad_down = 0;
+            pad_up = now;
+        } else if (pad_down) {
             to_view((pad_x + px * pad_r) / lw, (pad_y + py * pad_r) / lh, &vx, &vy);
-            ui_touch_event(PAD_FINGER, on ? (pad_down ? 1 : 0) : 3, vx, vy);
-            pad_down = on;
+            ui_touch_event(PAD_FINGER, 1, vx, vy);
         }
     }
     if (cam_r > 0) {
@@ -217,19 +235,22 @@ void input_poll(void) {
         cam_t = t;
         if (rx || ry) {
             if (cam_down && cam_dx * cam_dx + cam_dy * cam_dy > cam_r * cam_r && cam_dx * rx + cam_dy * ry > 0) {
-                ui_touch_event(CAM_FINGER, 3, -1, -1); // fin de un swipe: re-apoyar
+                // fin de un swipe: re-apoyar en la próxima lectura, no en el mismo frame del juego
+                // (ponytail: hipótesis de la QA del 12/11, cámara horizontal que no gira; confirmar en consola)
+                ui_touch_event(CAM_FINGER, 3, -1, -1);
                 cam_down = 0;
-            }
-            if (!cam_down) {
+            } else if (!cam_down) {
                 float m = sqrtf(rx * rx + ry * ry);
                 cam_dx = -rx / m * cam_r * 0.9f, cam_dy = -ry / m * cam_r * 0.9f;
                 to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
                 ui_touch_event(CAM_FINGER, 0, vx, vy);
                 cam_down = 1;
             }
-            cam_dx += rx * cam_v * dt, cam_dy += ry * cam_v * dt;
-            to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
-            ui_touch_event(CAM_FINGER, 1, vx, vy);
+            if (cam_down) {
+                cam_dx += rx * cam_v * dt, cam_dy += ry * cam_v * dt;
+                to_view((cam_x + cam_dx) / lw, (cam_y + cam_dy) / lh, &vx, &vy);
+                ui_touch_event(CAM_FINGER, 1, vx, vy);
+            }
         } else if (cam_down) {
             ui_touch_event(CAM_FINGER, 3, -1, -1);
             cam_down = 0;

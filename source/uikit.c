@@ -481,7 +481,7 @@ static const nmethod uievent_i[] = {
     NM("allTouches", ev_allTouches), NM("touchesForView:", ev_touchesForView), NM("touchesForWindow:", ev_touchesForView),
     NM("timestamp", ev_time), NM("type", ap_zero), {0}};
 
-#define MAX_TOUCH 10 // 2 reales + 6 botones + dedo del STICK + dedo de CAMERA (input.c)
+#define MAX_TOUCH 16 // 2 reales + 12 botones + dedo del STICK + dedo de CAMERA (input.c)
 static ui_touch *live[MAX_TOUCH]; // por id de dedo (input.c)
 static id touch_event;
 

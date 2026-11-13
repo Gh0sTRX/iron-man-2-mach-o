@@ -1,12 +1,18 @@
 # Botón -> toque en la pantalla, en coordenadas de lo que se ve (480x320, origen arriba a la izquierda).
-# Máximo 6 botones. Se edita por FTP en ux0:data/ironman2/controls.txt sin recompilar.
+# Máximo 12 botones. Se edita por FTP en ux0:data/ironman2/controls.txt sin recompilar.
+# Nombres: CROSS CIRCLE SQUARE TRIANGLE LTRIGGER RTRIGGER START SELECT UP DOWN LEFT RIGHT
 # STICK x y r: stick izquierdo / cruceta = dedo arrastrado alrededor de (x,y) (joystick virtual).
 # CAMERA x y r [v]: stick derecho = deslizar alrededor de (x,y), v px/s a fondo (cámara; subir v = más rápida).
+# STRETCH 1: imagen estirada a 960x544 sin barras (deforma; por defecto 816x544 con el aspecto original).
 # SELECT+START sostenidos 2 s cambian la rotación de la imagen (se guarda en rotation.txt).
-# Posiciones sacadas de los toques en partida (corrida 002); faltan misil/escudo/unibeam.
-STICK 55 250 55
-CAMERA 320 150 110 450
-CROSS 388 250
-CIRCLE 50 270
+# Joystick, disparo y vuelo (TRIANGLE, ícono arriba a la derecha) medidos en capturas en partida.
+# Misil/unibeam aparecen más adelante en el HUD: agregar sus líneas cuando se conozca la posición.
+STICK 69 251 40
+# La cámara se arrastra sobre zona sin botones: el arco de descenso (325-350, 253-306) y el disparo
+# quedan abajo a la derecha; el swipe alrededor de (320,150) los tocaba (corrida 005).
+CAMERA 240 140 80 450
+CROSS 378 247
+TRIANGLE 441 112
 START 24 26
 SELECT 240 160
+#STRETCH 1

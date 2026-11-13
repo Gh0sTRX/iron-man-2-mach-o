@@ -72,6 +72,32 @@ y `python3 -I tools/deploy_data.py` lo sube a `ux0:data/ironman2/`.
   ataque (388,250) y pausa (24,26) sacados de los toques del log sobre `frame_lit_2.tga`. Falta ubicar
   misil/escudo/unibeam (captura en combate).
 
+## QA de Gh0sTRX (PR #1, 12/11/2026): primera misión completa en consola
+
+- Stick izquierdo: `controls.txt` tenía el joystick en (55,250) y el real está en (69,251) (captura en partida):
+  con el stick ya inclinado el dedo bajaba fuera del círculo y `JoystickButton` no lo tomaba. Además
+  `JoystickButton::OnTouchDown` (0x1c600) marca doble toque si baja ≤500 ms después de soltar, y el log mostraba
+  el dedo 8 subiendo/bajando cada 17-34 ms en el borde de la zona muerta. Ahora el dedo baja en el centro, queda
+  1 s apoyado con el stick suelto y no re-baja antes de 550 ms.
+- Stick derecho: re-apoyo del swipe en la lectura siguiente (hipótesis, sin causa confirmada).
+- `CIRCLE 50 270` quitado (caía dentro del joystick). Disparo en (378,247). Hasta 12 botones.
+- Logo de Gameloft: `LaunchIGP`/`LaunchGLLive` (MenuBase::MyFSCommand) → NOP a `SetRestoreIGP`/`SetGll` (patch.c).
+- `STRETCH 1` en `controls.txt`: 960x544 sin barras (opcional; por defecto el aspecto original).
+- Falta: posiciones de misil/unibeam en el HUD (aparecen más adelante); vuelo lo habilita el script del nivel
+  (`SetMCFlyEnabled`), no es un botón fijo.
+
+## Corrida #5 en consola
+
+- Stick izquierdo y logo de Gameloft OK. Cámara: a veces disparaba o bajaba en vuelo. El swipe alrededor de
+  (320,150) r110 apoyaba en (334,248)/(355,243): arco de descenso (325-350, 253-306) y disparo. `CAMERA 240 140 80`.
+- Ícono de vuelo arriba a la derecha (441,112) -> `TRIANGLE`.
+
+## Corrida #6: límite de 40 fps
+
+- `Game::DoFrame` (0x998f4) hace espera activa hasta 25 ms por frame (`cmp r5, #24`): de ahí los 25,0 ms
+  clavados en PERF con todo en `resto (juego)`. El delta va a `FrameUpdate`, lógica por tiempo. Parche en
+  `patch.c` a `PORT_MIN_FRAME_MS` (16). A mirar: fps reales, velocidad de animaciones/física, audio.
+
 ## Pendiente
 
 - [ ] `controls.txt` con el joystick virtual (`STICK x y r`) y botones del HUD: falta ver el HUD en partida.
